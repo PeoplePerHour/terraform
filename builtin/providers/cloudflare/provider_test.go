@@ -1,4 +1,4 @@
-package heroku
+package cloudflare
 
 import (
 	"os"
@@ -14,7 +14,7 @@ var testAccProvider *schema.Provider
 func init() {
 	testAccProvider = Provider().(*schema.Provider)
 	testAccProviders = map[string]terraform.ResourceProvider{
-		"heroku": testAccProvider,
+		"cloudflare": testAccProvider,
 	}
 }
 
@@ -29,11 +29,15 @@ func TestProvider_impl(t *testing.T) {
 }
 
 func testAccPreCheck(t *testing.T) {
-	if v := os.Getenv("HEROKU_EMAIL"); v == "" {
-		t.Fatal("HEROKU_EMAIL must be set for acceptance tests")
+	if v := os.Getenv("CLOUDFLARE_EMAIL"); v == "" {
+		t.Fatal("CLOUDFLARE_EMAIL must be set for acceptance tests")
 	}
 
-	if v := os.Getenv("HEROKU_API_KEY"); v == "" {
-		t.Fatal("HEROKU_API_KEY must be set for acceptance tests")
+	if v := os.Getenv("CLOUDFLARE_TOKEN"); v == "" {
+		t.Fatal("CLOUDFLARE_TOKEN must be set for acceptance tests")
+	}
+
+	if v := os.Getenv("CLOUDFLARE_DOMAIN"); v == "" {
+		t.Fatal("CLOUDFLARE_DOMAIN must be set for acceptance tests. The domain is used to ` and destroy record against.")
 	}
 }

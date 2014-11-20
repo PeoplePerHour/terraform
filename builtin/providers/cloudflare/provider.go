@@ -1,7 +1,6 @@
-package mailgun
+package cloudflare
 
 import (
-	"log"
 	"os"
 
 	"github.com/hashicorp/terraform/helper/schema"
@@ -12,15 +11,23 @@ import (
 func Provider() terraform.ResourceProvider {
 	return &schema.Provider{
 		Schema: map[string]*schema.Schema{
-			"api_key": &schema.Schema{
+			"email": &schema.Schema{
 				Type:        schema.TypeString,
 				Required:    true,
-				DefaultFunc: envDefaultFunc("MAILGUN_API_KEY"),
+				DefaultFunc: envDefaultFunc("CLOUDFLARE_EMAIL"),
+				Description: "A registered CloudFlare email address.",
+			},
+
+			"token": &schema.Schema{
+				Type:        schema.TypeString,
+				Required:    true,
+				DefaultFunc: envDefaultFunc("CLOUDFLARE_TOKEN"),
+				Description: "The token key for API operations.",
 			},
 		},
 
 		ResourcesMap: map[string]*schema.Resource{
-			"mailgun_domain": resourceMailgunDomain(),
+			"cloudflare_record": resourceCloudFlareRecord(),
 		},
 
 		ConfigureFunc: providerConfigure,
@@ -39,9 +46,9 @@ func envDefaultFunc(k string) schema.SchemaDefaultFunc {
 
 func providerConfigure(d *schema.ResourceData) (interface{}, error) {
 	config := Config{
-		APIKey: d.Get("api_key").(string),
+		Email: d.Get("email").(string),
+		Token: d.Get("token").(string),
 	}
 
-	log.Println("[INFO] Initializing Mailgun client")
 	return config.Client()
 }
