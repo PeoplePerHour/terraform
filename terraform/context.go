@@ -523,7 +523,7 @@ func (c *walkContext) Walk() error {
 		// On Apply, we prune so that we don't do outputs if we destroyed
 		mod.prune()
 	}
-	if len(mod.Resources) == 0 {
+	if len(mod.Resources) == 0 && len(conf.Resources) != 0 {
 		mod.Outputs = nil
 		return nil
 	}
@@ -550,7 +550,14 @@ func (c *walkContext) Walk() error {
 			}
 		}
 		if vraw != nil {
-			outputs[o.Name] = vraw.(string)
+			if list, ok := vraw.([]interface{}); ok {
+				vraw = list[0]
+			}
+			if s, ok := vraw.(string); ok {
+				outputs[o.Name] = s
+			} else {
+				return fmt.Errorf("Type of output '%s' is not a string: %#v", o.Name, vraw)
+			}
 		}
 	}
 
@@ -922,6 +929,13 @@ func (c *walkContext) planDestroyWalkFn() depgraph.WalkFunc {
 	walkFn = func(n *depgraph.Noun) error {
 		switch m := n.Meta.(type) {
 		case *GraphNodeModule:
+			// Set the destroy bool on the module
+			md := result.Diff.ModuleByPath(m.Path)
+			if md == nil {
+				md = result.Diff.AddModule(m.Path)
+			}
+			md.Destroy = true
+
 			// Build another walkContext for this module and walk it.
 			wc := c.Context.walkContext(c.Operation, m.Path)
 
@@ -1665,10 +1679,19 @@ func (c *walkContext) computeResourceMultiVariable(
 	c.Context.sl.RLock()
 	defer c.Context.sl.RUnlock()
 
+	childPath := c.Path[1:len(c.Path)]
+
+	var modTree *module.Tree
+	if len(childPath) == 0 {
+		modTree = c.Context.module
+	} else {
+		modTree = c.Context.module.Child(childPath)
+	}
+
 	// Get the resource from the configuration so we can know how
 	// many of the resource there is.
 	var cr *config.Resource
-	for _, r := range c.Context.module.Config().Resources {
+	for _, r := range modTree.Config().Resources {
 		if r.Id() == v.ResourceId() {
 			cr = r
 			break
@@ -1682,8 +1705,7 @@ func (c *walkContext) computeResourceMultiVariable(
 	}
 
 	// Get the relevant module
-	// TODO: Not use only root module
-	module := c.Context.state.RootModule()
+	module := c.Context.state.ModuleByPath(c.Path)
 
 	count, err := cr.Count()
 	if err != nil {
@@ -1693,8 +1715,8 @@ func (c *walkContext) computeResourceMultiVariable(
 			err)
 	}
 
-	// If we have no count, return empty
-	if count == 0 {
+	// If we have no module in the state yet or count, return empty
+	if module == nil || count == 0 {
 		return "", nil
 	}
 

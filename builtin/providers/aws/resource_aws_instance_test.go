@@ -3,8 +3,10 @@ package aws
 import (
 	"fmt"
 	"testing"
+	"reflect"
 
 	"github.com/hashicorp/terraform/helper/resource"
+	"github.com/hashicorp/terraform/helper/schema"
 	"github.com/hashicorp/terraform/terraform"
 	"github.com/mitchellh/goamz/ec2"
 )
@@ -189,7 +191,7 @@ func TestAccInstance_tags(t *testing.T) {
 }
 
 func testAccCheckInstanceDestroy(s *terraform.State) error {
-	conn := testAccProvider.ec2conn
+	conn := testAccProvider.Meta().(*AWSClient).ec2conn
 
 	for _, rs := range s.RootModule().Resources {
 		if rs.Type != "aws_instance" {
@@ -231,7 +233,7 @@ func testAccCheckInstanceExists(n string, i *ec2.Instance) resource.TestCheckFun
 			return fmt.Errorf("No ID is set")
 		}
 
-		conn := testAccProvider.ec2conn
+		conn := testAccProvider.Meta().(*AWSClient).ec2conn
 		resp, err := conn.Instances(
 			[]string{rs.Primary.ID}, ec2.NewFilter())
 		if err != nil {
@@ -244,6 +246,22 @@ func testAccCheckInstanceExists(n string, i *ec2.Instance) resource.TestCheckFun
 		*i = resp.Reservations[0].Instances[0]
 
 		return nil
+	}
+}
+
+func TestInstanceTenancySchema(t *testing.T) {
+	actualSchema := resourceAwsInstance().Schema["tenancy"]
+	expectedSchema := &schema.Schema{
+				Type:     schema.TypeString,
+				Optional: true,
+				Computed: true,
+				ForceNew: true,
+			}
+	if !reflect.DeepEqual(actualSchema, expectedSchema  ) {
+		t.Fatalf(
+			"Got:\n\n%#v\n\nExpected:\n\n%#v\n",
+			actualSchema,
+			expectedSchema)
 	}
 }
 
@@ -338,11 +356,14 @@ resource "aws_instance" "foo" {
 	instance_type = "m1.small"
 	subnet_id = "${aws_subnet.foo.id}"
 	associate_public_ip_address = true
+	tenancy = "dedicated"
 }
 `
 
 const testAccCheckInstanceConfigTags = `
 resource "aws_instance" "foo" {
+	ami = "ami-4fccb37f"
+	instance_type = "m1.small"
 	tags {
 		foo = "bar"
 	}
@@ -351,6 +372,8 @@ resource "aws_instance" "foo" {
 
 const testAccCheckInstanceConfigTagsUpdate = `
 resource "aws_instance" "foo" {
+	ami = "ami-4fccb37f"
+	instance_type = "m1.small"
 	tags {
 		bar = "baz"
 	}

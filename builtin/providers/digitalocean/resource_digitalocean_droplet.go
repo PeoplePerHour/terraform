@@ -170,10 +170,10 @@ func resourceDigitalOceanDropletRead(d *schema.ResourceData, meta interface{}) e
 		return fmt.Errorf("Error retrieving droplet: %s", err)
 	}
 
-	if droplet.ImageSlug() == "" && droplet.ImageId() != "" {
-		d.Set("image", droplet.ImageId())
-	} else {
+	if droplet.ImageSlug() != "" {
 		d.Set("image", droplet.ImageSlug())
+	} else {
+		d.Set("image", droplet.ImageId())
 	}
 
 	d.Set("name", droplet.Name)
@@ -353,7 +353,7 @@ func WaitForDropletAttribute(
 	// Wait for the droplet so we can get the networking attributes
 	// that show up after a while
 	log.Printf(
-		"[INFO] Waiting for Droplet (%s) to have %s of %s",
+		"[INFO] Waiting for droplet (%s) to have %s of %s",
 		d.Id(), attribute, target)
 
 	stateConf := &resource.StateChangeConf{
