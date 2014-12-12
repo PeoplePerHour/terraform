@@ -43,6 +43,8 @@ func TestAccAWSELB_basic(t *testing.T) {
 						"aws_elb.bar", "listener.0.lb_port", "80"),
 					resource.TestCheckResourceAttr(
 						"aws_elb.bar", "listener.0.lb_protocol", "http"),
+					resource.TestCheckResourceAttr(
+						"aws_elb.bar", "cross_zone_load_balancing", "true"),
 				),
 			},
 		},
@@ -114,7 +116,7 @@ func TestAccAWSELB_HealthCheck(t *testing.T) {
 	})
 }
 func testAccCheckAWSELBDestroy(s *terraform.State) error {
-	conn := testAccProvider.elbconn
+	conn := testAccProvider.Meta().(*AWSClient).elbconn
 
 	for _, rs := range s.RootModule().Resources {
 		if rs.Type != "aws_elb" {
@@ -222,7 +224,7 @@ func testAccCheckAWSELBExists(n string, res *elb.LoadBalancer) resource.TestChec
 			return fmt.Errorf("No ELB ID is set")
 		}
 
-		conn := testAccProvider.elbconn
+		conn := testAccProvider.Meta().(*AWSClient).elbconn
 
 		describe, err := conn.DescribeLoadBalancers(&elb.DescribeLoadBalancer{
 			Names: []string{rs.Primary.ID},
@@ -256,6 +258,7 @@ resource "aws_elb" "bar" {
   }
 
   instances = []
+  cross_zone_load_balancing = true
 }
 `
 

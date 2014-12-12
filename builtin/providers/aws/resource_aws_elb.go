@@ -31,6 +31,11 @@ func resourceAwsElb() *schema.Resource {
 				Computed: true,
 			},
 
+			"cross_zone_load_balancing": &schema.Schema{
+				Type:     schema.TypeBool,
+				Optional: true,
+			},
+
 			"availability_zones": &schema.Schema{
 				Type:     schema.TypeList,
 				Elem:     &schema.Schema{Type: schema.TypeString},
@@ -150,36 +155,8 @@ func resourceAwsElb() *schema.Resource {
 	}
 }
 
-func resourceAwsElbHealthCheckHash(v interface{}) int {
-	var buf bytes.Buffer
-	m := v.(map[string]interface{})
-	buf.WriteString(fmt.Sprintf("%d-", m["healthy_threshold"].(int)))
-	buf.WriteString(fmt.Sprintf("%d-", m["unhealthy_threshold"].(int)))
-	buf.WriteString(fmt.Sprintf("%s-", m["target"].(string)))
-	buf.WriteString(fmt.Sprintf("%d-", m["interval"].(int)))
-	buf.WriteString(fmt.Sprintf("%d-", m["timeout"].(int)))
-
-	return hashcode.String(buf.String())
-}
-
-func resourceAwsElbListenerHash(v interface{}) int {
-	var buf bytes.Buffer
-	m := v.(map[string]interface{})
-	buf.WriteString(fmt.Sprintf("%d-", m["instance_port"].(int)))
-	buf.WriteString(fmt.Sprintf("%s-", m["instance_protocol"].(string)))
-	buf.WriteString(fmt.Sprintf("%d-", m["lb_port"].(int)))
-	buf.WriteString(fmt.Sprintf("%s-", m["lb_protocol"].(string)))
-
-	if v, ok := m["ssl_certificate_id"]; ok {
-		buf.WriteString(fmt.Sprintf("%s-", v.(string)))
-	}
-
-	return hashcode.String(buf.String())
-}
-
 func resourceAwsElbCreate(d *schema.ResourceData, meta interface{}) error {
-	p := meta.(*ResourceProvider)
-	elbconn := p.elbconn
+	elbconn := meta.(*AWSClient).elbconn
 
 	// Expand the "listener" set to goamz compat []elb.Listener
 	listeners, err := expandListeners(d.Get("listener").(*schema.Set).List())
@@ -246,76 +223,13 @@ func resourceAwsElbCreate(d *schema.ResourceData, meta interface{}) error {
 			}
 		}
 	}
-
+	
+	
 	return resourceAwsElbUpdate(d, meta)
 }
 
-func resourceAwsElbUpdate(d *schema.ResourceData, meta interface{}) error {
-	p := meta.(*ResourceProvider)
-	elbconn := p.elbconn
-
-	d.Partial(true)
-
-	// If we currently have instances, or did have instances,
-	// we want to figure out what to add and remove from the load
-	// balancer
-	if d.HasChange("instances") {
-		o, n := d.GetChange("instances")
-		os := o.(*schema.Set)
-		ns := n.(*schema.Set)
-		remove := expandStringList(os.Difference(ns).List())
-		add := expandStringList(ns.Difference(os).List())
-
-		if len(add) > 0 {
-			registerInstancesOpts := elb.RegisterInstancesWithLoadBalancer{
-				LoadBalancerName: d.Id(),
-				Instances:        add,
-			}
-
-			_, err := elbconn.RegisterInstancesWithLoadBalancer(&registerInstancesOpts)
-			if err != nil {
-				return fmt.Errorf("Failure registering instances: %s", err)
-			}
-		}
-		if len(remove) > 0 {
-			deRegisterInstancesOpts := elb.DeregisterInstancesFromLoadBalancer{
-				LoadBalancerName: d.Id(),
-				Instances:        remove,
-			}
-
-			_, err := elbconn.DeregisterInstancesFromLoadBalancer(&deRegisterInstancesOpts)
-			if err != nil {
-				return fmt.Errorf("Failure deregistering instances: %s", err)
-			}
-		}
-
-		d.SetPartial("instances")
-	}
-
-	d.Partial(false)
-	return resourceAwsElbRead(d, meta)
-}
-
-func resourceAwsElbDelete(d *schema.ResourceData, meta interface{}) error {
-	p := meta.(*ResourceProvider)
-	elbconn := p.elbconn
-
-	log.Printf("[INFO] Deleting ELB: %s", d.Id())
-
-	// Destroy the load balancer
-	deleteElbOpts := elb.DeleteLoadBalancer{
-		LoadBalancerName: d.Id(),
-	}
-	if _, err := elbconn.DeleteLoadBalancer(&deleteElbOpts); err != nil {
-		return fmt.Errorf("Error deleting ELB: %s", err)
-	}
-
-	return nil
-}
-
 func resourceAwsElbRead(d *schema.ResourceData, meta interface{}) error {
-	p := meta.(*ResourceProvider)
-	elbconn := p.elbconn
+	elbconn := meta.(*AWSClient).elbconn
 
 	// Retrieve the ELB properties for updating the state
 	describeElbOpts := &elb.DescribeLoadBalancer{
@@ -353,4 +267,108 @@ func resourceAwsElbRead(d *schema.ResourceData, meta interface{}) error {
 	}
 
 	return nil
+}
+
+func resourceAwsElbUpdate(d *schema.ResourceData, meta interface{}) error {
+	elbconn := meta.(*AWSClient).elbconn
+
+	d.Partial(true)
+
+	// If we currently have instances, or did have instances,
+	// we want to figure out what to add and remove from the load
+	// balancer
+	if d.HasChange("instances") {
+		o, n := d.GetChange("instances")
+		os := o.(*schema.Set)
+		ns := n.(*schema.Set)
+		remove := expandStringList(os.Difference(ns).List())
+		add := expandStringList(ns.Difference(os).List())
+
+		if len(add) > 0 {
+			registerInstancesOpts := elb.RegisterInstancesWithLoadBalancer{
+				LoadBalancerName: d.Id(),
+				Instances:        add,
+			}
+
+			_, err := elbconn.RegisterInstancesWithLoadBalancer(&registerInstancesOpts)
+			if err != nil {
+				return fmt.Errorf("Failure registering instances: %s", err)
+			}
+		}
+		if len(remove) > 0 {
+			deRegisterInstancesOpts := elb.DeregisterInstancesFromLoadBalancer{
+				LoadBalancerName: d.Id(),
+				Instances:        remove,
+			}
+
+			_, err := elbconn.DeregisterInstancesFromLoadBalancer(&deRegisterInstancesOpts)
+			if err != nil {
+				return fmt.Errorf("Failure deregistering instances: %s", err)
+			}
+		}
+		
+		d.SetPartial("instances")
+	}
+
+	log.Println("[INFO] outside modify attributes")
+		if d.HasChange("cross_zone_load_balancing") {
+			log.Println("[INFO] inside modify attributes")
+			attrs := elb.ModifyLoadBalancerAttributes{
+				LoadBalancerName: d.Get("name").(string),
+				LoadBalancerAttributes: elb.LoadBalancerAttributes{
+					CrossZoneLoadBalancingEnabled:  d.Get("cross_zone_load_balancing").(bool),
+				},
+			}
+			_, err := elbconn.ModifyLoadBalancerAttributes(&attrs)
+			if err != nil {
+				return fmt.Errorf("Failure configuring health check: %s", err)
+			}
+			d.SetPartial("cross_zone_load_balancing")
+		}
+
+	d.Partial(false)
+	return resourceAwsElbRead(d, meta)
+}
+
+func resourceAwsElbDelete(d *schema.ResourceData, meta interface{}) error {
+	elbconn := meta.(*AWSClient).elbconn
+
+	log.Printf("[INFO] Deleting ELB: %s", d.Id())
+
+	// Destroy the load balancer
+	deleteElbOpts := elb.DeleteLoadBalancer{
+		LoadBalancerName: d.Id(),
+	}
+	if _, err := elbconn.DeleteLoadBalancer(&deleteElbOpts); err != nil {
+		return fmt.Errorf("Error deleting ELB: %s", err)
+	}
+
+	return nil
+}
+
+func resourceAwsElbHealthCheckHash(v interface{}) int {
+	var buf bytes.Buffer
+	m := v.(map[string]interface{})
+	buf.WriteString(fmt.Sprintf("%d-", m["healthy_threshold"].(int)))
+	buf.WriteString(fmt.Sprintf("%d-", m["unhealthy_threshold"].(int)))
+	buf.WriteString(fmt.Sprintf("%s-", m["target"].(string)))
+	buf.WriteString(fmt.Sprintf("%d-", m["interval"].(int)))
+	buf.WriteString(fmt.Sprintf("%d-", m["timeout"].(int)))
+
+	return hashcode.String(buf.String())
+}
+
+func resourceAwsElbListenerHash(v interface{}) int {
+	var buf bytes.Buffer
+	m := v.(map[string]interface{})
+	buf.WriteString(fmt.Sprintf("%d-", m["instance_port"].(int)))
+	buf.WriteString(fmt.Sprintf("%s-", m["instance_protocol"].(string)))
+	buf.WriteString(fmt.Sprintf("%d-", m["lb_port"].(int)))
+	buf.WriteString(fmt.Sprintf("%s-", m["lb_protocol"].(string)))
+
+	if v, ok := m["ssl_certificate_id"]; ok {
+		buf.WriteString(fmt.Sprintf("%s-", v.(string)))
+	}
+
+	return hashcode.String(buf.String())
 }

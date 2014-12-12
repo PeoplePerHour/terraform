@@ -1,4 +1,27 @@
-## 0.3.2 (unreleased)
+## 0.3.5 (December 9, 2014)
+
+FEATURES:
+
+ * **Remote State**: State files can now be stored remotely via HTTP,
+     Consul, or HashiCorp's Atlas.
+ * **New Provider: `atlas`**: Retrieve artifacts for deployment from
+     HashiCorp's Atlas service.
+ * New `element()` function to index into arrays
+
+IMPROVEMENTS:
+
+  * provider/aws: Support tenancy for aws\_instance
+  * provider/aws: Support block devices for aws\_instance
+  * provider/aws: Support virtual\_name on block device
+  * provider/aws: Improve RDS reliability (more grace time)
+  * provider/aws: Added aws\_db\_parameter\_group resource
+  * provider/aws: Added tag support to aws\_subnet
+  * provider/aws: Routes in RouteTable are optional
+  * provider/aws: associate\_public\_ip\_address on aws\_launch\_configuration
+  * provider/aws: Added aws\_network\_acl
+  * provider/aws: Ingress rules in security groups are optional
+  * provider/aws: Support termination policy for ASG
+  * provider/digitalocean: Improved droplet size compatibility
 
 BUG FIXES:
 
@@ -7,6 +30,28 @@ BUG FIXES:
       some circumstances.
   * core: Fixing issue with count expansion with non-homogenous instance
       plans.
+  * core: Fix issue with referencing resource variables from resources
+      that don't exist yet within resources that do exist, or modules.
+  * core: Fixing depedency handling for modules
+  * core: Fixing output handling [GH-474]
+  * core: Fixing count interpolation in modules
+  * core: Fixing multi-var without module state
+  * core: Fixing HCL variable declaration
+  * core: Fixing resource interpolation for without state
+  * core: Fixing handling of computed maps
+  * command/init: Fixing recursion issue [GH-518]
+  * command: Validate config before requesting input [GH-602]
+  * build: Fixing GOPATHs with spaces
+
+MISC:
+
+  * provider/aws: Upgraded to helper.Schema
+  * provider/heroku: Upgraded to helper.Schema
+  * provider/mailgun: Upgraded to helper.Schema
+  * provider/dnsimple: Upgraded to helper.Schema
+  * provider/cloudflare: Upgraded to helper.Schema
+  * provider/digitalocean: Upgraded to helper.Schema
+  * provider/google: Upgraded to helper.Schema
 
 ## 0.3.1 (October 21, 2014)
 
