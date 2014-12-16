@@ -1,3 +1,29 @@
+## 0.3.6 (unreleased)
+
+FEATURES:
+
+  * **New provider: `cloudstack`**
+
+IMPROVEMENTS:
+
+  * **New resource: `heroku_cert`** - Manage Heroku app certs.
+  * provider/aws: Support `eu-central-1`, `cn-north-1`, and GovCloud. [GH-525]
+  * provider/aws: `route_table` can have tags. [GH-648]
+
+BUG FIXES:
+
+  * core: temporary/hidden files that look like Terraform configurations
+      are no longer loaded. [GH-548]
+  * core: Set types in resources now result in deterministic states,
+      resulting in cleaner plans. [GH-663]
+  * core: fix issue where "diff was not the same" would come up with
+      diffing lists. [GH-661]
+  * core: fix crash where module inputs weren't strings, and add more
+      validation around invalid types here. [GH-624]
+  * provider/aws: Fix crash case when internet gateway is not attached
+      to any VPC. [GH-664]
+  * provider/aws: `vpc_id` is no longer required. [GH-667]
+
 ## 0.3.5 (December 9, 2014)
 
 FEATURES:
