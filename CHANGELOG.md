@@ -20,9 +20,15 @@ BUG FIXES:
       diffing lists. [GH-661]
   * core: fix crash where module inputs weren't strings, and add more
       validation around invalid types here. [GH-624]
+  * core: fix error when using a computed module output as an input to
+      another module. [GH-659]
+  * core: map overrides in "terraform.tfvars" no longer result in a syntax
+      error. [GH-647]
   * provider/aws: Fix crash case when internet gateway is not attached
       to any VPC. [GH-664]
   * provider/aws: `vpc_id` is no longer required. [GH-667]
+  * provider/aws: `availability_zones` on ELB will contain more than one
+      AZ if it is set as such. [GH-682]
 
 ## 0.3.5 (December 9, 2014)
 
