@@ -1,3 +1,15 @@
+## 0.4.0 (unreleased)
+
+IMPROVEMENTS:
+
+  * **New config function: `split`** - Split a value based on a delimiter.
+      This is useful for faking lists as parameters to modules.
+
+BUG FIXES:
+
+  * core: module outputs can be used as inputs to other modules [GH-822]
+  * providers/aws: manually deleted VPC removes it from the state
+
 ## 0.3.7 (February 19, 2015)
 
 IMPROVEMENTS:
