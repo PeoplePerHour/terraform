@@ -57,6 +57,7 @@ func resourceAwsVpc() *schema.Resource {
 				Computed: true,
 			},
 
+
 			"tags": tagsSchema(),
 		},
 	}
@@ -67,7 +68,7 @@ func resourceAwsVpcCreate(d *schema.ResourceData, meta interface{}) error {
 
 	// Create the VPC
 	createOpts := &ec2.CreateVpc{
-		CidrBlock:       d.Get("cidr_block").(string),
+		CidrBlock: d.Get("cidr_block").(string),
 		InstanceTenancy: d.Get("instance_tenancy").(string),
 	}
 	log.Printf("[DEBUG] VPC create config: %#v", createOpts)
@@ -114,7 +115,6 @@ func resourceAwsVpcRead(d *schema.ResourceData, meta interface{}) error {
 		return err
 	}
 	if vpcRaw == nil {
-		d.SetId("")
 		return nil
 	}
 
@@ -243,7 +243,8 @@ func VPCStateRefreshFunc(conn *ec2.EC2, id string) resource.StateRefreshFunc {
 	}
 }
 
-func resourceAwsVpcSetDefaultNetworkAcl(conn *ec2.EC2, d *schema.ResourceData) error {
+
+func resourceAwsVpcSetDefaultNetworkAcl(conn *ec2.EC2, d *schema.ResourceData) error  {
 	filter := ec2.NewFilter()
 	filter.Add("default", "true")
 	filter.Add("vpc-id", d.Id())
@@ -259,7 +260,7 @@ func resourceAwsVpcSetDefaultNetworkAcl(conn *ec2.EC2, d *schema.ResourceData) e
 	return nil
 }
 
-func resourceAwsVpcSetDefaultSecurityGroup(conn *ec2.EC2, d *schema.ResourceData) error {
+func resourceAwsVpcSetDefaultSecurityGroup(conn *ec2.EC2, d *schema.ResourceData) error  {
 	filter := ec2.NewFilter()
 	filter.Add("group-name", "default")
 	filter.Add("vpc-id", d.Id())

@@ -72,14 +72,8 @@ The supported built-in functions are:
       only possible with splat variables from resources with a count
       greater than one. Example: `join(",", aws_instance.foo.*.id)`
 
-  * `split(delim, string)` - Splits the string previously created by `join` 
-      back into a list. This is useful for pushing lists through module 
-      outputs since they currently only support string values.
-      Example: `split(",", module.amod.server_ids)`
-
   * `lookup(map, key)` - Performs a dynamic lookup into a mapping
-      variable. The `map` parameter should be another variable, such
-      as `var.amis`.
+      variable.
 
   * `element(list, index)` - Returns a single element from a list
       at the given index. If the index is greater than the number of

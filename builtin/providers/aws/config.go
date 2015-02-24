@@ -12,10 +12,8 @@ import (
 	"github.com/mitchellh/goamz/ec2"
 	"github.com/mitchellh/goamz/elb"
 	"github.com/mitchellh/goamz/rds"
-
-	awsGo "github.com/awslabs/aws-sdk-go/aws"
-	"github.com/awslabs/aws-sdk-go/gen/route53"
-	"github.com/awslabs/aws-sdk-go/gen/s3"
+	"github.com/mitchellh/goamz/route53"
+	"github.com/mitchellh/goamz/s3"
 )
 
 type Config struct {
@@ -30,8 +28,7 @@ type AWSClient struct {
 	autoscalingconn *autoscaling.AutoScaling
 	s3conn          *s3.S3
 	rdsconn         *rds.Rds
-	r53conn         *route53.Route53
-	region          string
+	route53         *route53.Route53
 }
 
 // Client configures and returns a fully initailized AWSClient
@@ -54,11 +51,6 @@ func (c *Config) Client() (interface{}, error) {
 	}
 
 	if len(errs) == 0 {
-		// store AWS region in client struct, for region specific operations such as
-		// bucket storage in S3
-		client.region = c.Region
-		creds := awsGo.Creds(c.AccessKey, c.SecretKey, "")
-
 		log.Println("[INFO] Initializing EC2 connection")
 		client.ec2conn = ec2.New(auth, region)
 		log.Println("[INFO] Initializing ELB connection")
@@ -66,14 +58,11 @@ func (c *Config) Client() (interface{}, error) {
 		log.Println("[INFO] Initializing AutoScaling connection")
 		client.autoscalingconn = autoscaling.New(auth, region)
 		log.Println("[INFO] Initializing S3 connection")
+		client.s3conn = s3.New(auth, region)
 		log.Println("[INFO] Initializing RDS connection")
 		client.rdsconn = rds.New(auth, region)
 		log.Println("[INFO] Initializing Route53 connection")
-		// aws-sdk-go uses v4 for signing requests, which requires all global
-		// endpoints to use 'us-east-1'.
-		// See http://docs.aws.amazon.com/general/latest/gr/sigv4_changes.html
-		client.r53conn = route53.New(creds, "us-east-1", nil)
-		client.s3conn = s3.New(creds, c.Region, nil)
+		client.route53 = route53.New(auth, region)
 	}
 
 	if len(errs) > 0 {

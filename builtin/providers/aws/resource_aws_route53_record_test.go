@@ -7,9 +7,7 @@ import (
 
 	"github.com/hashicorp/terraform/helper/resource"
 	"github.com/hashicorp/terraform/terraform"
-
-	"github.com/awslabs/aws-sdk-go/aws"
-	awsr53 "github.com/awslabs/aws-sdk-go/gen/route53"
+	"github.com/mitchellh/goamz/route53"
 )
 
 func TestAccRoute53Record(t *testing.T) {
@@ -45,7 +43,7 @@ func TestAccRoute53Record_generatesSuffix(t *testing.T) {
 }
 
 func testAccCheckRoute53RecordDestroy(s *terraform.State) error {
-	conn := testAccProvider.Meta().(*AWSClient).r53conn
+	conn := testAccProvider.Meta().(*AWSClient).route53
 	for _, rs := range s.RootModule().Resources {
 		if rs.Type != "aws_route53_record" {
 			continue
@@ -56,21 +54,16 @@ func testAccCheckRoute53RecordDestroy(s *terraform.State) error {
 		name := parts[1]
 		rType := parts[2]
 
-		lopts := &awsr53.ListResourceRecordSetsRequest{
-			HostedZoneID:    aws.String(cleanZoneID(zone)),
-			StartRecordName: aws.String(name),
-			StartRecordType: aws.String(rType),
-		}
-
-		resp, err := conn.ListResourceRecordSets(lopts)
+		lopts := &route53.ListOpts{Name: name, Type: rType}
+		resp, err := conn.ListResourceRecordSets(zone, lopts)
 		if err != nil {
 			return err
 		}
-		if len(resp.ResourceRecordSets) == 0 {
+		if len(resp.Records) == 0 {
 			return nil
 		}
-		rec := resp.ResourceRecordSets[0]
-		if FQDN(*rec.Name) == FQDN(name) && *rec.Type == rType {
+		rec := resp.Records[0]
+		if route53.FQDN(rec.Name) == route53.FQDN(name) && rec.Type == rType {
 			return fmt.Errorf("Record still exists: %#v", rec)
 		}
 	}
@@ -79,7 +72,7 @@ func testAccCheckRoute53RecordDestroy(s *terraform.State) error {
 
 func testAccCheckRoute53RecordExists(n string) resource.TestCheckFunc {
 	return func(s *terraform.State) error {
-		conn := testAccProvider.Meta().(*AWSClient).r53conn
+		conn := testAccProvider.Meta().(*AWSClient).route53
 		rs, ok := s.RootModule().Resources[n]
 		if !ok {
 			return fmt.Errorf("Not found: %s", n)
@@ -94,21 +87,16 @@ func testAccCheckRoute53RecordExists(n string) resource.TestCheckFunc {
 		name := parts[1]
 		rType := parts[2]
 
-		lopts := &awsr53.ListResourceRecordSetsRequest{
-			HostedZoneID:    aws.String(cleanZoneID(zone)),
-			StartRecordName: aws.String(name),
-			StartRecordType: aws.String(rType),
-		}
-
-		resp, err := conn.ListResourceRecordSets(lopts)
+		lopts := &route53.ListOpts{Name: name, Type: rType}
+		resp, err := conn.ListResourceRecordSets(zone, lopts)
 		if err != nil {
 			return err
 		}
-		if len(resp.ResourceRecordSets) == 0 {
+		if len(resp.Records) == 0 {
 			return fmt.Errorf("Record does not exist")
 		}
-		rec := resp.ResourceRecordSets[0]
-		if FQDN(*rec.Name) == FQDN(name) && *rec.Type == rType {
+		rec := resp.Records[0]
+		if route53.FQDN(rec.Name) == route53.FQDN(name) && rec.Type == rType {
 			return nil
 		}
 		return fmt.Errorf("Record does not exist: %#v", rec)

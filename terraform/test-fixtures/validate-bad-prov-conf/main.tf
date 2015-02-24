@@ -3,7 +3,5 @@ provider "aws" {
 }
 
 resource "aws_instance" "test" {
-    provisioner "shell" {
-        command = "foo"
-    }
+    provisioner "shell" {}
 }

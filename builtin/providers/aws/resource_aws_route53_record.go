@@ -9,9 +9,7 @@ import (
 	"github.com/hashicorp/terraform/helper/hashcode"
 	"github.com/hashicorp/terraform/helper/resource"
 	"github.com/hashicorp/terraform/helper/schema"
-
-	"github.com/awslabs/aws-sdk-go/aws"
-	"github.com/awslabs/aws-sdk-go/gen/route53"
+	"github.com/mitchellh/goamz/route53"
 )
 
 func resourceAwsRoute53Record() *schema.Resource {
@@ -59,10 +57,11 @@ func resourceAwsRoute53Record() *schema.Resource {
 }
 
 func resourceAwsRoute53RecordCreate(d *schema.ResourceData, meta interface{}) error {
-	conn := meta.(*AWSClient).r53conn
+	conn := meta.(*AWSClient).route53
+
 	zone := d.Get("zone_id").(string)
 
-	zoneRecord, err := conn.GetHostedZone(&route53.GetHostedZoneRequest{ID: aws.String(zone)})
+	zoneRecord, err := conn.GetHostedZone(zone)
 	if err != nil {
 		return err
 	}
@@ -71,7 +70,7 @@ func resourceAwsRoute53RecordCreate(d *schema.ResourceData, meta interface{}) er
 	// If it does not, add the zone name to form a fully qualified name
 	// and keep AWS happy.
 	recordName := d.Get("name").(string)
-	zoneName := strings.Trim(*zoneRecord.HostedZone.Name, ".")
+	zoneName := strings.Trim(zoneRecord.HostedZone.Name, ".")
 	if !strings.HasSuffix(recordName, zoneName) {
 		d.Set("name", strings.Join([]string{recordName, zoneName}, "."))
 	}
@@ -85,19 +84,14 @@ func resourceAwsRoute53RecordCreate(d *schema.ResourceData, meta interface{}) er
 	// Create the new records. We abuse StateChangeConf for this to
 	// retry for us since Route53 sometimes returns errors about another
 	// operation happening at the same time.
-	changeBatch := &route53.ChangeBatch{
-		Comment: aws.String("Managed by Terraform"),
+	req := &route53.ChangeResourceRecordSetsRequest{
+		Comment: "Managed by Terraform",
 		Changes: []route53.Change{
 			route53.Change{
-				Action:            aws.String("UPSERT"),
-				ResourceRecordSet: rec,
+				Action: "UPSERT",
+				Record: *rec,
 			},
 		},
-	}
-
-	req := &route53.ChangeResourceRecordSetsRequest{
-		HostedZoneID: aws.String(cleanZoneID(*zoneRecord.HostedZone.ID)),
-		ChangeBatch:  changeBatch,
 	}
 
 	log.Printf("[DEBUG] Creating resource records for zone: %s, name: %s",
@@ -109,7 +103,7 @@ func resourceAwsRoute53RecordCreate(d *schema.ResourceData, meta interface{}) er
 		Timeout:    5 * time.Minute,
 		MinTimeout: 1 * time.Second,
 		Refresh: func() (interface{}, string, error) {
-			resp, err := conn.ChangeResourceRecordSets(req)
+			resp, err := conn.ChangeResourceRecordSets(zone, req)
 			if err != nil {
 				if strings.Contains(err.Error(), "PriorRequestNotComplete") {
 					// There is some pending operation, so just retry
@@ -120,7 +114,7 @@ func resourceAwsRoute53RecordCreate(d *schema.ResourceData, meta interface{}) er
 				return nil, "failure", err
 			}
 
-			return resp, "accepted", nil
+			return resp.ChangeInfo, "accepted", nil
 		},
 	}
 
@@ -128,7 +122,7 @@ func resourceAwsRoute53RecordCreate(d *schema.ResourceData, meta interface{}) er
 	if err != nil {
 		return err
 	}
-	changeInfo := respRaw.(*route53.ChangeResourceRecordSetsResponse).ChangeInfo
+	changeInfo := respRaw.(route53.ChangeInfo)
 
 	// Generate an ID
 	d.SetId(fmt.Sprintf("%s_%s_%s", zone, d.Get("name").(string), d.Get("type").(string)))
@@ -141,10 +135,7 @@ func resourceAwsRoute53RecordCreate(d *schema.ResourceData, meta interface{}) er
 		Timeout:    10 * time.Minute,
 		MinTimeout: 5 * time.Second,
 		Refresh: func() (result interface{}, state string, err error) {
-			changeRequest := &route53.GetChangeRequest{
-				ID: aws.String(cleanChangeID(*changeInfo.ID)),
-			}
-			return resourceAwsGoRoute53Wait(conn, changeRequest)
+			return resourceAwsRoute53Wait(conn, changeInfo.ID)
 		},
 	}
 	_, err = wait.WaitForState()
@@ -156,33 +147,31 @@ func resourceAwsRoute53RecordCreate(d *schema.ResourceData, meta interface{}) er
 }
 
 func resourceAwsRoute53RecordRead(d *schema.ResourceData, meta interface{}) error {
-	conn := meta.(*AWSClient).r53conn
+	conn := meta.(*AWSClient).route53
 
 	zone := d.Get("zone_id").(string)
-	lopts := &route53.ListResourceRecordSetsRequest{
-		HostedZoneID:    aws.String(cleanZoneID(zone)),
-		StartRecordName: aws.String(d.Get("name").(string)),
-		StartRecordType: aws.String(d.Get("type").(string)),
+	lopts := &route53.ListOpts{
+		Name: d.Get("name").(string),
+		Type: d.Get("type").(string),
 	}
-
-	resp, err := conn.ListResourceRecordSets(lopts)
+	resp, err := conn.ListResourceRecordSets(zone, lopts)
 	if err != nil {
 		return err
 	}
 
 	// Scan for a matching record
 	found := false
-	for _, record := range resp.ResourceRecordSets {
-		if FQDN(*record.Name) != FQDN(*lopts.StartRecordName) {
+	for _, record := range resp.Records {
+		if route53.FQDN(record.Name) != route53.FQDN(lopts.Name) {
 			continue
 		}
-		if strings.ToUpper(*record.Type) != strings.ToUpper(*lopts.StartRecordType) {
+		if strings.ToUpper(record.Type) != strings.ToUpper(lopts.Type) {
 			continue
 		}
 
 		found = true
 
-		d.Set("records", record.ResourceRecords)
+		d.Set("records", record.Records)
 		d.Set("ttl", record.TTL)
 
 		break
@@ -196,11 +185,7 @@ func resourceAwsRoute53RecordRead(d *schema.ResourceData, meta interface{}) erro
 }
 
 func resourceAwsRoute53RecordDelete(d *schema.ResourceData, meta interface{}) error {
-	conn := meta.(*AWSClient).r53conn
-
-	zone := d.Get("zone_id").(string)
-	log.Printf("[DEBUG] Deleting resource records for zone: %s, name: %s",
-		zone, d.Get("name").(string))
+	conn := meta.(*AWSClient).route53
 
 	// Get the records
 	rec, err := resourceAwsRoute53RecordBuildSet(d)
@@ -209,20 +194,18 @@ func resourceAwsRoute53RecordDelete(d *schema.ResourceData, meta interface{}) er
 	}
 
 	// Create the new records
-	changeBatch := &route53.ChangeBatch{
-		Comment: aws.String("Deleted by Terraform"),
+	req := &route53.ChangeResourceRecordSetsRequest{
+		Comment: "Deleted by Terraform",
 		Changes: []route53.Change{
 			route53.Change{
-				Action:            aws.String("DELETE"),
-				ResourceRecordSet: rec,
+				Action: "DELETE",
+				Record: *rec,
 			},
 		},
 	}
-
-	req := &route53.ChangeResourceRecordSetsRequest{
-		HostedZoneID: aws.String(cleanZoneID(zone)),
-		ChangeBatch:  changeBatch,
-	}
+	zone := d.Get("zone_id").(string)
+	log.Printf("[DEBUG] Deleting resource records for zone: %s, name: %s",
+		zone, d.Get("name").(string))
 
 	wait := resource.StateChangeConf{
 		Pending:    []string{"rejected"},
@@ -230,7 +213,7 @@ func resourceAwsRoute53RecordDelete(d *schema.ResourceData, meta interface{}) er
 		Timeout:    5 * time.Minute,
 		MinTimeout: 1 * time.Second,
 		Refresh: func() (interface{}, string, error) {
-			_, err := conn.ChangeResourceRecordSets(req)
+			_, err := conn.ChangeResourceRecordSets(zone, req)
 			if err != nil {
 				if strings.Contains(err.Error(), "PriorRequestNotComplete") {
 					// There is some pending operation, so just retry
@@ -259,26 +242,17 @@ func resourceAwsRoute53RecordDelete(d *schema.ResourceData, meta interface{}) er
 
 func resourceAwsRoute53RecordBuildSet(d *schema.ResourceData) (*route53.ResourceRecordSet, error) {
 	recs := d.Get("records").(*schema.Set).List()
-	records := make([]route53.ResourceRecord, 0, len(recs))
+	records := make([]string, 0, len(recs))
 
 	for _, r := range recs {
-		records = append(records, route53.ResourceRecord{Value: aws.String(r.(string))})
+		records = append(records, r.(string))
 	}
 
 	rec := &route53.ResourceRecordSet{
-		Name:            aws.String(d.Get("name").(string)),
-		Type:            aws.String(d.Get("type").(string)),
-		TTL:             aws.Long(int64(d.Get("ttl").(int))),
-		ResourceRecords: records,
+		Name:    d.Get("name").(string),
+		Type:    d.Get("type").(string),
+		TTL:     d.Get("ttl").(int),
+		Records: records,
 	}
 	return rec, nil
-}
-
-func FQDN(name string) string {
-	n := len(name)
-	if n == 0 || name[n-1] == '.' {
-		return name
-	} else {
-		return name + "."
-	}
 }
