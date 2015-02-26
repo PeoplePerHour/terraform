@@ -58,7 +58,11 @@ func (c *GraphCommand) Run(args []string) int {
 		return 1
 	}
 
-	c.Ui.Output(terraform.GraphDot(g, nil))
+	opts := &terraform.GraphDotOpts{
+		ModuleDepth: moduleDepth,
+	}
+
+	c.Ui.Output(terraform.GraphDot(g, opts))
 
 	return 0
 }

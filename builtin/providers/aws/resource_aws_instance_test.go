@@ -145,17 +145,10 @@ func TestAccAWSInstance_sourceDestCheck(t *testing.T) {
 		CheckDestroy: testAccCheckInstanceDestroy,
 		Steps: []resource.TestStep{
 			resource.TestStep{
-				Config: testAccInstanceConfigSourceDestDisable,
+				Config: testAccInstanceConfigSourceDest,
 				Check: resource.ComposeTestCheckFunc(
-					testAccCheckInstanceExists("aws_instance.foo", &v),
-					testCheck(false),
-				),
-			},
-
-			resource.TestStep{
-				Config: testAccInstanceConfigSourceDestEnable,
-				Check: resource.ComposeTestCheckFunc(
-					testAccCheckInstanceExists("aws_instance.foo", &v),
+					testAccCheckInstanceExists(
+						"aws_instance.foo", &v),
 					testCheck(true),
 				),
 			},
@@ -163,7 +156,8 @@ func TestAccAWSInstance_sourceDestCheck(t *testing.T) {
 			resource.TestStep{
 				Config: testAccInstanceConfigSourceDestDisable,
 				Check: resource.ComposeTestCheckFunc(
-					testAccCheckInstanceExists("aws_instance.foo", &v),
+					testAccCheckInstanceExists(
+						"aws_instance.foo", &v),
 					testCheck(false),
 				),
 			},
@@ -394,7 +388,7 @@ resource "aws_instance" "foo" {
 }
 `
 
-const testAccInstanceConfigSourceDestEnable = `
+const testAccInstanceConfigSourceDest = `
 resource "aws_vpc" "foo" {
 	cidr_block = "10.1.0.0/16"
 }

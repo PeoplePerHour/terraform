@@ -8,12 +8,10 @@ import (
 
 	"github.com/hashicorp/terraform/helper/resource"
 	"github.com/hashicorp/terraform/terraform"
-
-	"github.com/awslabs/aws-sdk-go/aws"
-	"github.com/awslabs/aws-sdk-go/gen/s3"
 )
 
 func TestAccAWSS3Bucket(t *testing.T) {
+	rand.Seed(time.Now().UnixNano())
 
 	resource.Test(t, resource.TestCase{
 		PreCheck:     func() { testAccPreCheck(t) },
@@ -37,12 +35,13 @@ func testAccCheckAWSS3BucketDestroy(s *terraform.State) error {
 		if rs.Type != "aws_s3_bucket" {
 			continue
 		}
-		err := conn.DeleteBucket(&s3.DeleteBucketRequest{
-			Bucket: aws.String(rs.Primary.ID),
-		})
-		if err != nil {
-			return err
+
+		bucket := conn.Bucket(rs.Primary.ID)
+		resp, err := bucket.Head("/")
+		if err == nil {
+			return fmt.Errorf("S3Bucket still exists")
 		}
+		defer resp.Body.Close()
 	}
 	return nil
 }
@@ -59,13 +58,12 @@ func testAccCheckAWSS3BucketExists(n string) resource.TestCheckFunc {
 		}
 
 		conn := testAccProvider.Meta().(*AWSClient).s3conn
-		err := conn.HeadBucket(&s3.HeadBucketRequest{
-			Bucket: aws.String(rs.Primary.ID),
-		})
-
+		bucket := conn.Bucket(rs.Primary.ID)
+		resp, err := bucket.Head("/")
 		if err != nil {
 			return fmt.Errorf("S3Bucket error: %v", err)
 		}
+		defer resp.Body.Close()
 		return nil
 	}
 }
@@ -77,4 +75,4 @@ resource "aws_s3_bucket" "bar" {
 	bucket = "tf-test-bucket-%d"
 	acl = "public-read"
 }
-`, rand.New(rand.NewSource(time.Now().UnixNano())).Int())
+`, rand.Int())

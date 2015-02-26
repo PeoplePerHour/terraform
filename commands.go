@@ -14,10 +14,8 @@ var Commands map[string]cli.CommandFactory
 // Ui is the cli.Ui used for communicating to the outside world.
 var Ui cli.Ui
 
-const (
-	ErrorPrefix  = "e:"
-	OutputPrefix = "o:"
-)
+const ErrorPrefix = "e:"
+const OutputPrefix = "o:"
 
 func init() {
 	Ui = &cli.PrefixedUi{

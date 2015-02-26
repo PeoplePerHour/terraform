@@ -7,16 +7,15 @@ import (
 	"unicode"
 
 	"github.com/hashicorp/terraform/helper/multierror"
+	"github.com/mitchellh/goamz/autoscaling"
 	"github.com/mitchellh/goamz/aws"
 	"github.com/mitchellh/goamz/ec2"
 	"github.com/mitchellh/goamz/elb"
 	"github.com/mitchellh/goamz/rds"
+	"github.com/mitchellh/goamz/s3"
 
 	awsGo "github.com/awslabs/aws-sdk-go/aws"
-	"github.com/awslabs/aws-sdk-go/gen/autoscaling"
-	awsRDS "github.com/awslabs/aws-sdk-go/gen/rds"
 	"github.com/awslabs/aws-sdk-go/gen/route53"
-	"github.com/awslabs/aws-sdk-go/gen/s3"
 )
 
 type Config struct {
@@ -32,8 +31,6 @@ type AWSClient struct {
 	s3conn          *s3.S3
 	rdsconn         *rds.Rds
 	r53conn         *route53.Route53
-	region          string
-	awsRDSconn      *awsRDS.RDS
 }
 
 // Client configures and returns a fully initailized AWSClient
@@ -56,30 +53,23 @@ func (c *Config) Client() (interface{}, error) {
 	}
 
 	if len(errs) == 0 {
-		// store AWS region in client struct, for region specific operations such as
-		// bucket storage in S3
-		client.region = c.Region
-
-		creds := awsGo.Creds(c.AccessKey, c.SecretKey, "")
-
 		log.Println("[INFO] Initializing EC2 connection")
 		client.ec2conn = ec2.New(auth, region)
 		log.Println("[INFO] Initializing ELB connection")
 		client.elbconn = elb.New(auth, region)
 		log.Println("[INFO] Initializing AutoScaling connection")
-		client.autoscalingconn = autoscaling.New(creds, c.Region, nil)
+		client.autoscalingconn = autoscaling.New(auth, region)
 		log.Println("[INFO] Initializing S3 connection")
-		client.s3conn = s3.New(creds, c.Region, nil)
+		client.s3conn = s3.New(auth, region)
 		log.Println("[INFO] Initializing RDS connection")
 		client.rdsconn = rds.New(auth, region)
+		log.Println("[INFO] Initializing Route53 connection")
+		creds := awsGo.Creds(c.AccessKey, c.SecretKey, "")
 
 		// aws-sdk-go uses v4 for signing requests, which requires all global
 		// endpoints to use 'us-east-1'.
 		// See http://docs.aws.amazon.com/general/latest/gr/sigv4_changes.html
-		log.Println("[INFO] Initializing Route53 connection")
 		client.r53conn = route53.New(creds, "us-east-1", nil)
-		log.Println("[INFO] Initializing AWS Go RDS connection")
-		client.awsRDSconn = awsRDS.New(creds, c.Region, nil)
 	}
 
 	if len(errs) > 0 {

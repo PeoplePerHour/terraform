@@ -68,8 +68,7 @@ func (c *ApplyCommand) Run(args []string) int {
 
 	// Prepare the extra hooks to count resources
 	countHook := new(CountHook)
-	stateHook := new(StateHook)
-	c.Meta.extraHooks = []terraform.Hook{countHook, stateHook}
+	c.Meta.extraHooks = []terraform.Hook{countHook}
 
 	if !c.Destroy && maybeInit {
 		// Do a detect to determine if we need to do an init + apply.
@@ -150,18 +149,6 @@ func (c *ApplyCommand) Run(args []string) int {
 				"Error creating plan: %s", err))
 			return 1
 		}
-	}
-
-	// Setup the state hook for continous state updates
-	{
-		state, err := c.State()
-		if err != nil {
-			c.Ui.Error(fmt.Sprintf(
-				"Error reading state: %s", err))
-			return 1
-		}
-
-		stateHook.State = state
 	}
 
 	// Start the apply in a goroutine so that we can be interrupted.

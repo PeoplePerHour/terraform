@@ -5,9 +5,7 @@ import (
 	"log"
 
 	"github.com/hashicorp/terraform/helper/schema"
-
-	"github.com/awslabs/aws-sdk-go/aws"
-	"github.com/awslabs/aws-sdk-go/gen/s3"
+	"github.com/mitchellh/goamz/s3"
 )
 
 func resourceAwsS3Bucket() *schema.Resource {
@@ -35,23 +33,14 @@ func resourceAwsS3Bucket() *schema.Resource {
 
 func resourceAwsS3BucketCreate(d *schema.ResourceData, meta interface{}) error {
 	s3conn := meta.(*AWSClient).s3conn
-	awsRegion := meta.(*AWSClient).region
 
 	// Get the bucket and acl
 	bucket := d.Get("bucket").(string)
 	acl := d.Get("acl").(string)
 
 	log.Printf("[DEBUG] S3 bucket create: %s, ACL: %s", bucket, acl)
-
-	req := &s3.CreateBucketRequest{
-		Bucket: aws.String(bucket),
-		ACL:    aws.String(acl),
-		CreateBucketConfiguration: &s3.CreateBucketConfiguration{
-			LocationConstraint: aws.String(awsRegion),
-		},
-	}
-
-	_, err := s3conn.CreateBucket(req)
+	s3Bucket := s3conn.Bucket(bucket)
+	err := s3Bucket.PutBucket(s3.ACL(acl))
 	if err != nil {
 		return fmt.Errorf("Error creating S3 bucket: %s", err)
 	}
@@ -65,12 +54,12 @@ func resourceAwsS3BucketCreate(d *schema.ResourceData, meta interface{}) error {
 func resourceAwsS3BucketRead(d *schema.ResourceData, meta interface{}) error {
 	s3conn := meta.(*AWSClient).s3conn
 
-	err := s3conn.HeadBucket(&s3.HeadBucketRequest{
-		Bucket: aws.String(d.Id()),
-	})
+	bucket := s3conn.Bucket(d.Id())
+	resp, err := bucket.Head("/")
 	if err != nil {
 		return err
 	}
+	defer resp.Body.Close()
 	return nil
 }
 
@@ -78,11 +67,7 @@ func resourceAwsS3BucketDelete(d *schema.ResourceData, meta interface{}) error {
 	s3conn := meta.(*AWSClient).s3conn
 
 	log.Printf("[DEBUG] S3 Delete Bucket: %s", d.Id())
-	err := s3conn.DeleteBucket(&s3.DeleteBucketRequest{
-		Bucket: aws.String(d.Id()),
-	})
-	if err != nil {
-		return err
-	}
-	return nil
+	bucket := s3conn.Bucket(d.Id())
+
+	return bucket.DelBucket()
 }

@@ -10,6 +10,7 @@ import (
 // If it is of the form name then look in the configured project and then hosted image projects.
 func resolveImage(c *Config, name string) (string, error) {
 
+
 	if strings.HasPrefix(name, "https://www.googleapis.com/compute/v1/") {
 		return name, nil
 

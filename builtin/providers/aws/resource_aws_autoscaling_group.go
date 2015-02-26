@@ -9,9 +9,7 @@ import (
 	"github.com/hashicorp/terraform/helper/hashcode"
 	"github.com/hashicorp/terraform/helper/resource"
 	"github.com/hashicorp/terraform/helper/schema"
-
-	"github.com/awslabs/aws-sdk-go/aws"
-	"github.com/awslabs/aws-sdk-go/gen/autoscaling"
+	"github.com/mitchellh/goamz/autoscaling"
 )
 
 func resourceAwsAutoscalingGroup() *schema.Resource {
@@ -125,25 +123,30 @@ func resourceAwsAutoscalingGroup() *schema.Resource {
 func resourceAwsAutoscalingGroupCreate(d *schema.ResourceData, meta interface{}) error {
 	autoscalingconn := meta.(*AWSClient).autoscalingconn
 
-	var autoScalingGroupOpts autoscaling.CreateAutoScalingGroupType
-	autoScalingGroupOpts.AutoScalingGroupName = aws.String(d.Get("name").(string))
-	autoScalingGroupOpts.HealthCheckType = aws.String(d.Get("health_check_type").(string))
-	autoScalingGroupOpts.LaunchConfigurationName = aws.String(d.Get("launch_configuration").(string))
-	autoScalingGroupOpts.MinSize = aws.Integer(d.Get("min_size").(int))
-	autoScalingGroupOpts.MaxSize = aws.Integer(d.Get("max_size").(int))
-	autoScalingGroupOpts.AvailabilityZones = expandStringList(
+	var autoScalingGroupOpts autoscaling.CreateAutoScalingGroup
+	autoScalingGroupOpts.Name = d.Get("name").(string)
+	autoScalingGroupOpts.HealthCheckType = d.Get("health_check_type").(string)
+	autoScalingGroupOpts.LaunchConfigurationName = d.Get("launch_configuration").(string)
+	autoScalingGroupOpts.MinSize = d.Get("min_size").(int)
+	autoScalingGroupOpts.MaxSize = d.Get("max_size").(int)
+	autoScalingGroupOpts.SetMinSize = true
+	autoScalingGroupOpts.SetMaxSize = true
+	autoScalingGroupOpts.AvailZone = expandStringList(
 		d.Get("availability_zones").(*schema.Set).List())
 
 	if v, ok := d.GetOk("default_cooldown"); ok {
-		autoScalingGroupOpts.DefaultCooldown = aws.Integer(v.(int))
+		autoScalingGroupOpts.DefaultCooldown = v.(int)
+		autoScalingGroupOpts.SetDefaultCooldown = true
 	}
 
 	if v, ok := d.GetOk("desired_capacity"); ok {
-		autoScalingGroupOpts.DesiredCapacity = aws.Integer(v.(int))
+		autoScalingGroupOpts.DesiredCapacity = v.(int)
+		autoScalingGroupOpts.SetDesiredCapacity = true
 	}
 
 	if v, ok := d.GetOk("health_check_grace_period"); ok {
-		autoScalingGroupOpts.HealthCheckGracePeriod = aws.Integer(v.(int))
+		autoScalingGroupOpts.HealthCheckGracePeriod = v.(int)
+		autoScalingGroupOpts.SetHealthCheckGracePeriod = true
 	}
 
 	if v, ok := d.GetOk("load_balancers"); ok && v.(*schema.Set).Len() > 0 {
@@ -152,8 +155,8 @@ func resourceAwsAutoscalingGroupCreate(d *schema.ResourceData, meta interface{})
 	}
 
 	if v, ok := d.GetOk("vpc_zone_identifier"); ok && v.(*schema.Set).Len() > 0 {
-		exp := expandStringList(v.(*schema.Set).List())
-		autoScalingGroupOpts.VPCZoneIdentifier = aws.String(strings.Join(exp, ","))
+		autoScalingGroupOpts.VPCZoneIdentifier = expandStringList(
+			v.(*schema.Set).List())
 	}
 
 	if v, ok := d.GetOk("termination_policies"); ok && v.(*schema.Set).Len() > 0 {
@@ -162,7 +165,7 @@ func resourceAwsAutoscalingGroupCreate(d *schema.ResourceData, meta interface{})
 	}
 
 	log.Printf("[DEBUG] AutoScaling Group create configuration: %#v", autoScalingGroupOpts)
-	err := autoscalingconn.CreateAutoScalingGroup(&autoScalingGroupOpts)
+	_, err := autoscalingconn.CreateAutoScalingGroup(&autoScalingGroupOpts)
 	if err != nil {
 		return fmt.Errorf("Error creating Autoscaling Group: %s", err)
 	}
@@ -183,16 +186,16 @@ func resourceAwsAutoscalingGroupRead(d *schema.ResourceData, meta interface{}) e
 	}
 
 	d.Set("availability_zones", g.AvailabilityZones)
-	d.Set("default_cooldown", *g.DefaultCooldown)
-	d.Set("desired_capacity", *g.DesiredCapacity)
-	d.Set("health_check_grace_period", *g.HealthCheckGracePeriod)
-	d.Set("health_check_type", *g.HealthCheckType)
-	d.Set("launch_configuration", *g.LaunchConfigurationName)
+	d.Set("default_cooldown", g.DefaultCooldown)
+	d.Set("desired_capacity", g.DesiredCapacity)
+	d.Set("health_check_grace_period", g.HealthCheckGracePeriod)
+	d.Set("health_check_type", g.HealthCheckType)
+	d.Set("launch_configuration", g.LaunchConfigurationName)
 	d.Set("load_balancers", g.LoadBalancerNames)
-	d.Set("min_size", *g.MinSize)
-	d.Set("max_size", *g.MaxSize)
-	d.Set("name", *g.AutoScalingGroupName)
-	d.Set("vpc_zone_identifier", strings.Split(*g.VPCZoneIdentifier, ","))
+	d.Set("min_size", g.MinSize)
+	d.Set("max_size", g.MaxSize)
+	d.Set("name", g.Name)
+	d.Set("vpc_zone_identifier", strings.Split(g.VPCZoneIdentifier, ","))
 	d.Set("termination_policies", g.TerminationPolicies)
 
 	return nil
@@ -201,28 +204,31 @@ func resourceAwsAutoscalingGroupRead(d *schema.ResourceData, meta interface{}) e
 func resourceAwsAutoscalingGroupUpdate(d *schema.ResourceData, meta interface{}) error {
 	autoscalingconn := meta.(*AWSClient).autoscalingconn
 
-	opts := autoscaling.UpdateAutoScalingGroupType{
-		AutoScalingGroupName: aws.String(d.Id()),
+	opts := autoscaling.UpdateAutoScalingGroup{
+		Name: d.Id(),
 	}
 
 	if d.HasChange("desired_capacity") {
-		opts.DesiredCapacity = aws.Integer(d.Get("desired_capacity").(int))
+		opts.DesiredCapacity = d.Get("desired_capacity").(int)
+		opts.SetDesiredCapacity = true
 	}
 
 	if d.HasChange("launch_configuration") {
-		opts.LaunchConfigurationName = aws.String(d.Get("launch_configuration").(string))
+		opts.LaunchConfigurationName = d.Get("launch_configuration").(string)
 	}
 
 	if d.HasChange("min_size") {
-		opts.MinSize = aws.Integer(d.Get("min_size").(int))
+		opts.MinSize = d.Get("min_size").(int)
+		opts.SetMinSize = true
 	}
 
 	if d.HasChange("max_size") {
-		opts.MaxSize = aws.Integer(d.Get("max_size").(int))
+		opts.MaxSize = d.Get("max_size").(int)
+		opts.SetMaxSize = true
 	}
 
 	log.Printf("[DEBUG] AutoScaling Group update configuration: %#v", opts)
-	err := autoscalingconn.UpdateAutoScalingGroup(&opts)
+	_, err := autoscalingconn.UpdateAutoScalingGroup(&opts)
 	if err != nil {
 		d.Partial(true)
 		return fmt.Errorf("Error updating Autoscaling group: %s", err)
@@ -244,14 +250,14 @@ func resourceAwsAutoscalingGroupDelete(d *schema.ResourceData, meta interface{})
 	if g == nil {
 		return nil
 	}
-	if len(g.Instances) > 0 || *g.DesiredCapacity > 0 {
+	if len(g.Instances) > 0 || g.DesiredCapacity > 0 {
 		if err := resourceAwsAutoscalingGroupDrain(d, meta); err != nil {
 			return err
 		}
 	}
 
 	log.Printf("[DEBUG] AutoScaling Group destroy: %v", d.Id())
-	deleteopts := autoscaling.DeleteAutoScalingGroupType{AutoScalingGroupName: aws.String(d.Id())}
+	deleteopts := autoscaling.DeleteAutoScalingGroup{Name: d.Id()}
 
 	// You can force an autoscaling group to delete
 	// even if it's in the process of scaling a resource.
@@ -259,14 +265,15 @@ func resourceAwsAutoscalingGroupDelete(d *schema.ResourceData, meta interface{})
 	// and then delete the group. This bypasses that and leaves
 	// resources potentially dangling.
 	if d.Get("force_delete").(bool) {
-		deleteopts.ForceDelete = aws.Boolean(true)
+		deleteopts.ForceDelete = true
 	}
 
-	if err := autoscalingconn.DeleteAutoScalingGroup(&deleteopts); err != nil {
-		autoscalingerr, ok := err.(aws.APIError)
+	if _, err := autoscalingconn.DeleteAutoScalingGroup(&deleteopts); err != nil {
+		autoscalingerr, ok := err.(*autoscaling.Error)
 		if ok && autoscalingerr.Code == "InvalidGroup.NotFound" {
 			return nil
 		}
+
 		return err
 	}
 
@@ -278,14 +285,14 @@ func getAwsAutoscalingGroup(
 	meta interface{}) (*autoscaling.AutoScalingGroup, error) {
 	autoscalingconn := meta.(*AWSClient).autoscalingconn
 
-	describeOpts := autoscaling.AutoScalingGroupNamesType{
-		AutoScalingGroupNames: []string{d.Id()},
+	describeOpts := autoscaling.DescribeAutoScalingGroups{
+		Names: []string{d.Id()},
 	}
 
 	log.Printf("[DEBUG] AutoScaling Group describe configuration: %#v", describeOpts)
 	describeGroups, err := autoscalingconn.DescribeAutoScalingGroups(&describeOpts)
 	if err != nil {
-		autoscalingerr, ok := err.(aws.APIError)
+		autoscalingerr, ok := err.(*autoscaling.Error)
 		if ok && autoscalingerr.Code == "InvalidGroup.NotFound" {
 			d.SetId("")
 			return nil, nil
@@ -296,7 +303,7 @@ func getAwsAutoscalingGroup(
 
 	// Search for the autoscaling group
 	for idx, asc := range describeGroups.AutoScalingGroups {
-		if *asc.AutoScalingGroupName == d.Id() {
+		if asc.Name == d.Id() {
 			return &describeGroups.AutoScalingGroups[idx], nil
 		}
 	}
@@ -311,13 +318,16 @@ func resourceAwsAutoscalingGroupDrain(d *schema.ResourceData, meta interface{}) 
 
 	// First, set the capacity to zero so the group will drain
 	log.Printf("[DEBUG] Reducing autoscaling group capacity to zero")
-	opts := autoscaling.UpdateAutoScalingGroupType{
-		AutoScalingGroupName: aws.String(d.Id()),
-		DesiredCapacity:      aws.Integer(0),
-		MinSize:              aws.Integer(0),
-		MaxSize:              aws.Integer(0),
+	opts := autoscaling.UpdateAutoScalingGroup{
+		Name:               d.Id(),
+		DesiredCapacity:    0,
+		MinSize:            0,
+		MaxSize:            0,
+		SetDesiredCapacity: true,
+		SetMinSize:         true,
+		SetMaxSize:         true,
 	}
-	if err := autoscalingconn.UpdateAutoScalingGroup(&opts); err != nil {
+	if _, err := autoscalingconn.UpdateAutoScalingGroup(&opts); err != nil {
 		return fmt.Errorf("Error setting capacity to zero to drain: %s", err)
 	}
 

@@ -32,13 +32,12 @@ func (c *OutputCommand) Run(args []string) int {
 	}
 	name := args[0]
 
-	stateStore, err := c.Meta.State()
+	state, err := c.Meta.loadState()
 	if err != nil {
 		c.Ui.Error(fmt.Sprintf("Error reading state: %s", err))
 		return 1
 	}
 
-	state := stateStore.State()
 	if len(state.RootModule().Outputs) == 0 {
 		c.Ui.Error(fmt.Sprintf(
 			"The state file has no outputs defined. Define an output\n" +

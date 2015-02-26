@@ -100,56 +100,6 @@ func (s *State) ModuleByPath(path []string) *ModuleState {
 	return nil
 }
 
-// ModuleOrphans returns all the module orphans in this state by
-// returning their full paths. These paths can be used with ModuleByPath
-// to return the actual state.
-func (s *State) ModuleOrphans(path []string, c *config.Config) [][]string {
-	childrenKeys := make(map[string]struct{})
-	if c != nil {
-		for _, m := range c.Modules {
-			childrenKeys[m.Name] = struct{}{}
-		}
-	}
-
-	// Go over the direct children and find any that aren't in our
-	// keys.
-	var orphans [][]string
-	for _, m := range s.Children(path) {
-		if _, ok := childrenKeys[m.Path[len(m.Path)-1]]; ok {
-			continue
-		}
-
-		orphans = append(orphans, m.Path)
-	}
-
-	return orphans
-}
-
-// Empty returns true if the state is empty.
-func (s *State) Empty() bool {
-	if s == nil {
-		return true
-	}
-
-	return len(s.Modules) == 0
-}
-
-// IsRemote returns true if State represents a state that exists and is
-// remote.
-func (s *State) IsRemote() bool {
-	if s == nil {
-		return false
-	}
-	if s.Remote == nil {
-		return false
-	}
-	if s.Remote.Type == "" {
-		return false
-	}
-
-	return true
-}
-
 // RootModule returns the ModuleState for the root module
 func (s *State) RootModule() *ModuleState {
 	root := s.ModuleByPath(rootModulePath)
@@ -159,41 +109,20 @@ func (s *State) RootModule() *ModuleState {
 	return root
 }
 
-// Equal tests if one state is equal to another.
-func (s *State) Equal(other *State) bool {
-	// If one is nil, we do a direct check
-	if s == nil || other == nil {
-		return s == other
+func (s *State) init() {
+	if s.Version == 0 {
+		s.Version = StateVersion
 	}
-
-	// If the versions are different, they're certainly not equal
-	if s.Version != other.Version {
-		return false
-	}
-
-	// If any of the modules are not equal, then this state isn't equal
-	if len(s.Modules) != len(other.Modules) {
-		return false
-	}
-	for _, m := range s.Modules {
-		// This isn't very optimal currently but works.
-		otherM := other.ModuleByPath(m.Path)
-		if otherM == nil {
-			return false
+	if len(s.Modules) == 0 {
+		root := &ModuleState{
+			Path: rootModulePath,
 		}
-
-		// If they're not equal, then we're not equal!
-		if !m.Equal(otherM) {
-			return false
-		}
+		root.init()
+		s.Modules = []*ModuleState{root}
 	}
-
-	return true
 }
 
-// DeepCopy performs a deep copy of the state structure and returns
-// a new structure.
-func (s *State) DeepCopy() *State {
+func (s *State) deepcopy() *State {
 	if s == nil {
 		return nil
 	}
@@ -209,27 +138,6 @@ func (s *State) DeepCopy() *State {
 		n.Remote = s.Remote.deepcopy()
 	}
 	return n
-}
-
-// IncrementSerialMaybe increments the serial number of this state
-// if it different from the other state.
-func (s *State) IncrementSerialMaybe(other *State) {
-	if !s.Equal(other) {
-		s.Serial++
-	}
-}
-
-func (s *State) init() {
-	if s.Version == 0 {
-		s.Version = StateVersion
-	}
-	if len(s.Modules) == 0 {
-		root := &ModuleState{
-			Path: rootModulePath,
-		}
-		root.init()
-		s.Modules = []*ModuleState{root}
-	}
 }
 
 // prune is used to remove any resources that are no longer required
@@ -274,12 +182,7 @@ func (s *State) String() string {
 
 		s := bufio.NewScanner(strings.NewReader(mStr))
 		for s.Scan() {
-			text := s.Text()
-			if text != "" {
-				text = "  " + text
-			}
-
-			buf.WriteString(fmt.Sprintf("%s\n", text))
+			buf.WriteString(fmt.Sprintf("  %s\n", s.Text()))
 		}
 	}
 
@@ -309,7 +212,7 @@ func (r *RemoteState) deepcopy() *RemoteState {
 }
 
 func (r *RemoteState) Empty() bool {
-	return r == nil || r.Type == ""
+	return r.Type == "" && len(r.Config) == 0
 }
 
 func (r *RemoteState) Equals(other *RemoteState) bool {
@@ -361,54 +264,6 @@ type ModuleState struct {
 	Dependencies []string `json:"depends_on,omitempty"`
 }
 
-// Equal tests whether one module state is equal to another.
-func (m *ModuleState) Equal(other *ModuleState) bool {
-	// Paths must be equal
-	if !reflect.DeepEqual(m.Path, other.Path) {
-		return false
-	}
-
-	// Outputs must be equal
-	if len(m.Outputs) != len(other.Outputs) {
-		return false
-	}
-	for k, v := range m.Outputs {
-		if other.Outputs[k] != v {
-			return false
-		}
-	}
-
-	// Dependencies must be equal. This sorts these in place but
-	// this shouldn't cause any problems.
-	sort.Strings(m.Dependencies)
-	sort.Strings(other.Dependencies)
-	if len(m.Dependencies) != len(other.Dependencies) {
-		return false
-	}
-	for i, d := range m.Dependencies {
-		if other.Dependencies[i] != d {
-			return false
-		}
-	}
-
-	// Resources must be equal
-	if len(m.Resources) != len(other.Resources) {
-		return false
-	}
-	for k, r := range m.Resources {
-		otherR, ok := other.Resources[k]
-		if !ok {
-			return false
-		}
-
-		if !r.Equal(otherR) {
-			return false
-		}
-	}
-
-	return true
-}
-
 // IsRoot says whether or not this module diff is for the root module.
 func (m *ModuleState) IsRoot() bool {
 	return reflect.DeepEqual(m.Path, rootModulePath)
@@ -423,14 +278,12 @@ func (m *ModuleState) Orphans(c *config.Config) []string {
 		keys[k] = struct{}{}
 	}
 
-	if c != nil {
-		for _, r := range c.Resources {
-			delete(keys, r.Id())
+	for _, r := range c.Resources {
+		delete(keys, r.Id())
 
-			for k, _ := range keys {
-				if strings.HasPrefix(k, r.Id()+".") {
-					delete(keys, k)
-				}
+		for k, _ := range keys {
+			if strings.HasPrefix(k, r.Id()+".") {
+				delete(keys, k)
 			}
 		}
 	}
@@ -493,15 +346,8 @@ func (m *ModuleState) deepcopy() *ModuleState {
 func (m *ModuleState) prune() {
 	for k, v := range m.Resources {
 		v.prune()
-
 		if (v.Primary == nil || v.Primary.ID == "") && len(v.Tainted) == 0 {
 			delete(m.Resources, k)
-		}
-	}
-
-	for k, v := range m.Outputs {
-		if v == config.UnknownVariableValue {
-			delete(m.Outputs, k)
 		}
 	}
 }
@@ -642,63 +488,6 @@ type ResourceState struct {
 	Tainted []*InstanceState `json:"tainted,omitempty"`
 }
 
-// Equal tests whether two ResourceStates are equal.
-func (s *ResourceState) Equal(other *ResourceState) bool {
-	if s.Type != other.Type {
-		return false
-	}
-
-	// Dependencies must be equal
-	sort.Strings(s.Dependencies)
-	sort.Strings(other.Dependencies)
-	if len(s.Dependencies) != len(other.Dependencies) {
-		return false
-	}
-	for i, d := range s.Dependencies {
-		if other.Dependencies[i] != d {
-			return false
-		}
-	}
-
-	// States must be equal
-	if !s.Primary.Equal(other.Primary) {
-		return false
-	}
-
-	// Tainted
-	taints := make(map[string]*InstanceState)
-	for _, t := range other.Tainted {
-		if t == nil {
-			continue
-		}
-
-		taints[t.ID] = t
-	}
-	for _, t := range s.Tainted {
-		if t == nil {
-			continue
-		}
-
-		otherT, ok := taints[t.ID]
-		if !ok {
-			return false
-		}
-		delete(taints, t.ID)
-
-		if !t.Equal(otherT) {
-			return false
-		}
-	}
-
-	// This means that we have stuff in other tainted that we don't
-	// have, so it is not equal.
-	if len(taints) > 0 {
-		return false
-	}
-
-	return true
-}
-
 func (r *ResourceState) init() {
 	if r.Primary == nil {
 		r.Primary = &InstanceState{}
@@ -728,14 +517,12 @@ func (r *ResourceState) prune() {
 	n := len(r.Tainted)
 	for i := 0; i < n; i++ {
 		inst := r.Tainted[i]
-		if inst == nil || inst.ID == "" {
+		if inst.ID == "" {
 			copy(r.Tainted[i:], r.Tainted[i+1:])
 			r.Tainted[n-1] = nil
 			n--
-			i--
 		}
 	}
-
 	r.Tainted = r.Tainted[:n]
 }
 
@@ -793,35 +580,6 @@ func (i *InstanceState) deepcopy() *InstanceState {
 		}
 	}
 	return n
-}
-
-func (s *InstanceState) Equal(other *InstanceState) bool {
-	// Short circuit some nil checks
-	if s == nil || other == nil {
-		return s == other
-	}
-
-	// IDs must be equal
-	if s.ID != other.ID {
-		return false
-	}
-
-	// Attributes must be equal
-	if len(s.Attributes) != len(other.Attributes) {
-		return false
-	}
-	for k, v := range s.Attributes {
-		otherV, ok := other.Attributes[k]
-		if !ok {
-			return false
-		}
-
-		if v != otherV {
-			return false
-		}
-	}
-
-	return true
 }
 
 // MergeDiff takes a ResourceDiff and merges the attributes into
@@ -968,6 +726,9 @@ func WriteState(d *State, dst io.Writer) error {
 
 	// Ensure the version is set
 	d.Version = StateVersion
+
+	// Always increment the serial number
+	d.Serial++
 
 	// Encode the data in a human-friendly way
 	data, err := json.MarshalIndent(d, "", "    ")

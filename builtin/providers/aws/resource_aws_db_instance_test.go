@@ -6,9 +6,7 @@ import (
 
 	"github.com/hashicorp/terraform/helper/resource"
 	"github.com/hashicorp/terraform/terraform"
-
-	"github.com/awslabs/aws-sdk-go/aws"
-	"github.com/awslabs/aws-sdk-go/gen/rds"
+	"github.com/mitchellh/goamz/rds"
 )
 
 func TestAccAWSDBInstance(t *testing.T) {
@@ -37,7 +35,12 @@ func TestAccAWSDBInstance(t *testing.T) {
 					resource.TestCheckResourceAttr(
 						"aws_db_instance.bar", "name", "baz"),
 					resource.TestCheckResourceAttr(
+						// Shouldn't save password to state
+						"aws_db_instance.bar", "password", ""),
+					resource.TestCheckResourceAttr(
 						"aws_db_instance.bar", "username", "foo"),
+					resource.TestCheckResourceAttr(
+						"aws_db_instance.bar", "security_group_names.3322503515", "secfoobarbaz-test-terraform"),
 					resource.TestCheckResourceAttr(
 						"aws_db_instance.bar", "parameter_group_name", "default.mysql5.6"),
 				),
@@ -47,7 +50,7 @@ func TestAccAWSDBInstance(t *testing.T) {
 }
 
 func testAccCheckAWSDBInstanceDestroy(s *terraform.State) error {
-	conn := testAccProvider.Meta().(*AWSClient).awsRDSconn
+	conn := testAccProvider.Meta().(*AWSClient).rdsconn
 
 	for _, rs := range s.RootModule().Resources {
 		if rs.Type != "aws_db_instance" {
@@ -56,19 +59,19 @@ func testAccCheckAWSDBInstanceDestroy(s *terraform.State) error {
 
 		// Try to find the Group
 		resp, err := conn.DescribeDBInstances(
-			&rds.DescribeDBInstancesMessage{
-				DBInstanceIdentifier: aws.String(rs.Primary.ID),
+			&rds.DescribeDBInstances{
+				DBInstanceIdentifier: rs.Primary.ID,
 			})
 
 		if err == nil {
 			if len(resp.DBInstances) != 0 &&
-				*resp.DBInstances[0].DBInstanceIdentifier == rs.Primary.ID {
+				resp.DBInstances[0].DBInstanceIdentifier == rs.Primary.ID {
 				return fmt.Errorf("DB Instance still exists")
 			}
 		}
 
 		// Verify the error
-		newerr, ok := err.(*aws.APIError)
+		newerr, ok := err.(*rds.Error)
 		if !ok {
 			return err
 		}
@@ -83,16 +86,16 @@ func testAccCheckAWSDBInstanceDestroy(s *terraform.State) error {
 func testAccCheckAWSDBInstanceAttributes(v *rds.DBInstance) resource.TestCheckFunc {
 	return func(s *terraform.State) error {
 
-		if *v.Engine != "mysql" {
-			return fmt.Errorf("bad engine: %#v", *v.Engine)
+		if len(v.DBSecurityGroupNames) == 0 {
+			return fmt.Errorf("no sec names: %#v", v.DBSecurityGroupNames)
 		}
 
-		if *v.EngineVersion != "5.6.21" {
-			return fmt.Errorf("bad engine_version: %#v", *v.EngineVersion)
+		if v.Engine != "mysql" {
+			return fmt.Errorf("bad engine: %#v", v.Engine)
 		}
 
-		if *v.BackupRetentionPeriod != 0 {
-			return fmt.Errorf("bad backup_retention_period: %#v", *v.BackupRetentionPeriod)
+		if v.EngineVersion != "5.6.21" {
+			return fmt.Errorf("bad engine_version: %#v", v.EngineVersion)
 		}
 
 		return nil
@@ -110,10 +113,10 @@ func testAccCheckAWSDBInstanceExists(n string, v *rds.DBInstance) resource.TestC
 			return fmt.Errorf("No DB Instance ID is set")
 		}
 
-		conn := testAccProvider.Meta().(*AWSClient).awsRDSconn
+		conn := testAccProvider.Meta().(*AWSClient).rdsconn
 
-		opts := rds.DescribeDBInstancesMessage{
-			DBInstanceIdentifier: aws.String(rs.Primary.ID),
+		opts := rds.DescribeDBInstances{
+			DBInstanceIdentifier: rs.Primary.ID,
 		}
 
 		resp, err := conn.DescribeDBInstances(&opts)
@@ -123,7 +126,7 @@ func testAccCheckAWSDBInstanceExists(n string, v *rds.DBInstance) resource.TestC
 		}
 
 		if len(resp.DBInstances) != 1 ||
-			*resp.DBInstances[0].DBInstanceIdentifier != rs.Primary.ID {
+			resp.DBInstances[0].DBInstanceIdentifier != rs.Primary.ID {
 			return fmt.Errorf("DB Instance not found")
 		}
 
@@ -134,6 +137,15 @@ func testAccCheckAWSDBInstanceExists(n string, v *rds.DBInstance) resource.TestC
 }
 
 const testAccAWSDBInstanceConfig = `
+resource "aws_db_security_group" "bar" {
+	name = "secfoobarbaz-test-terraform"
+	description = "just cuz"
+
+	ingress {
+		cidr = "10.0.0.1/24"
+	}
+}
+
 resource "aws_db_instance" "bar" {
 	identifier = "foobarbaz-test-terraform"
 
@@ -145,8 +157,7 @@ resource "aws_db_instance" "bar" {
 	password = "barbarbarbar"
 	username = "foo"
 
-	backup_retention_period = 0
-
+	security_group_names = ["${aws_db_security_group.bar.name}"]
 	parameter_group_name = "default.mysql5.6"
 }
 `
