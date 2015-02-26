@@ -1,9 +1,32 @@
 ## 0.4.0 (unreleased)
 
+FEATURES:
+
+  * **Self-variables** can be used to reference the current resource's
+      attributes within a provisioner. Ex. `${self.private_ip_address}` [GH-1033]
+  * **Continous state** saving during `terraform apply`. The state file is
+      continously updated as apply is running, meaning that the state is
+      less likely to become corrupt in a catastrophic case: terraform panic
+      or system killing Terraform.
+  * **New provider: `dme` (DNSMadeEasy)** [GH-855]
+
 IMPROVEMENTS:
 
-  * provider/aws: Convert AWS Route53 to awslabs/aws-sdk-go
+  * **New config function: `split`** - Split a value based on a delimiter.
+      This is useful for faking lists as parameters to modules.
+  * core: The serial of the state is only updated if there is an actual
+      change. This will lower the amount of state changing on things
+      like refresh.
 
+BUG FIXES:
+
+  * core: module outputs can be used as inputs to other modules [GH-822]
+  * core: Self-referencing splat variables are no longer allowed in
+      provisioners. [GH-795][GH-868]
+  * core: Validate that `depends_on` doesn't contain interpolations. [GH-1015]
+  * core: Module inputs can be non-strings. [GH-819]
+  * providers/aws: manually deleted VPC removes it from the state
+  * providers/aws: `source_dest_check` regression fixed (now works). [GH-1020]
 
 ## 0.3.7 (February 19, 2015)
 

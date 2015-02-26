@@ -200,6 +200,13 @@ aws_instance.bar:
   type = aws_instance
 `
 
+const testTerraformApplyCreateBeforeUpdateStr = `
+aws_instance.bar:
+  ID = foo
+  foo = baz
+  type = aws_instance
+`
+
 const testTerraformApplyCancelStr = `
 aws_instance.foo:
   ID = foo
@@ -233,7 +240,7 @@ aws_instance.foo.1:
 `
 
 const testTerraformApplyCountDecToOneStr = `
-aws_instance.foo.0:
+aws_instance.foo:
   ID = bar
   foo = foo
   type = aws_instance
@@ -276,6 +283,33 @@ module.child:
     ID = foo
     foo = bar
     type = aws_instance
+`
+
+const testTerraformApplyModuleBoolStr = `
+aws_instance.bar:
+  ID = foo
+  foo = 1
+  type = aws_instance
+
+  Dependencies:
+    module.child
+
+module.child:
+  <no state>
+  Outputs:
+
+  leader = 1
+`
+
+const testTerraformApplyMultiProviderStr = `
+aws_instance.bar:
+  ID = foo
+  foo = bar
+  type = aws_instance
+do_instance.foo:
+  ID = foo
+  num = 2
+  type = do_instance
 `
 
 const testTerraformApplyProvisionerStr = `
@@ -322,6 +356,28 @@ const testTerraformApplyProvisionerResourceRefStr = `
 aws_instance.bar:
   ID = foo
   num = 2
+  type = aws_instance
+`
+
+const testTerraformApplyProvisionerSelfRefStr = `
+aws_instance.foo:
+  ID = foo
+  foo = bar
+  type = aws_instance
+`
+
+const testTerraformApplyProvisionerMultiSelfRefStr = `
+aws_instance.foo.0:
+  ID = foo
+  foo = number 0
+  type = aws_instance
+aws_instance.foo.1:
+  ID = foo
+  foo = number 1
+  type = aws_instance
+aws_instance.foo.2:
+  ID = foo
+  foo = number 2
   type = aws_instance
 `
 
