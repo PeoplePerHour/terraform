@@ -285,6 +285,7 @@ func resourceAwsSecurityGroupRuleHash(v interface{}) int {
 	buf.WriteString(fmt.Sprintf("%d-", m["from_port"].(int)))
 	buf.WriteString(fmt.Sprintf("%d-", m["to_port"].(int)))
 	buf.WriteString(fmt.Sprintf("%s-", m["protocol"].(string)))
+	buf.WriteString(fmt.Sprintf("%t-", m["self"].(bool)))
 
 	// We need to make sure to sort the strings below so that we always
 	// generate the same hash code no matter what is in the set.
@@ -396,8 +397,8 @@ func resourceAwsSecurityGroupUpdateRules(
 		os := o.(*schema.Set)
 		ns := n.(*schema.Set)
 
-		remove := expandIPPerms(d.Id(), os.Difference(ns).List())
-		add := expandIPPerms(d.Id(), ns.Difference(os).List())
+		remove := expandIPPerms(group, os.Difference(ns).List())
+		add := expandIPPerms(group, ns.Difference(os).List())
 
 		// TODO: We need to handle partial state better in the in-between
 		// in this update.
@@ -452,6 +453,11 @@ func resourceAwsSecurityGroupUpdateRules(
 						GroupID:       group.GroupID,
 						IPPermissions: add,
 					}
+					if group.VPCID == nil || *group.VPCID == "" {
+						req.GroupID = nil
+						req.GroupName = group.GroupName
+					}
+
 					err = ec2conn.AuthorizeSecurityGroupIngress(req)
 				}
 

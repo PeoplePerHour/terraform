@@ -39,7 +39,10 @@ func expandListeners(configured []interface{}) ([]elb.Listener, error) {
 
 // Takes the result of flatmap.Expand for an array of ingress/egress
 // security group rules and returns EC2 API compatible objects
-func expandIPPerms(id string, configured []interface{}) []ec2.IPPermission {
+func expandIPPerms(
+	group ec2.SecurityGroup, configured []interface{}) []ec2.IPPermission {
+	vpc := group.VPCID != nil
+
 	perms := make([]ec2.IPPermission, len(configured))
 	for i, mRaw := range configured {
 		var perm ec2.IPPermission
@@ -57,7 +60,11 @@ func expandIPPerms(id string, configured []interface{}) []ec2.IPPermission {
 			}
 		}
 		if v, ok := m["self"]; ok && v.(bool) {
-			groups = append(groups, id)
+			if vpc {
+				groups = append(groups, *group.GroupID)
+			} else {
+				groups = append(groups, *group.GroupName)
+			}
 		}
 
 		if len(groups) > 0 {
@@ -71,6 +78,11 @@ func expandIPPerms(id string, configured []interface{}) []ec2.IPPermission {
 				perm.UserIDGroupPairs[i] = ec2.UserIDGroupPair{
 					GroupID: aws.String(id),
 					UserID:  aws.String(ownerId),
+				}
+				if !vpc {
+					perm.UserIDGroupPairs[i].GroupID = nil
+					perm.UserIDGroupPairs[i].GroupName = aws.String(id)
+					perm.UserIDGroupPairs[i].UserID = nil
 				}
 			}
 		}
@@ -194,4 +206,48 @@ func expandStringList(configured []interface{}) []string {
 		vs = append(vs, v.(string))
 	}
 	return vs
+}
+
+//Flattens an array of private ip addresses into a []string, where the elements returned are the IP strings e.g. "192.168.0.0"
+func flattenNetworkInterfacesPrivateIPAddesses(dtos []ec2.NetworkInterfacePrivateIPAddress) []string {
+	ips := make([]string, 0, len(dtos))
+	for _, v := range dtos {
+		ip := *v.PrivateIPAddress
+		ips = append(ips, ip)
+	}
+	return ips
+}
+
+//Flattens security group identifiers into a []string, where the elements returned are the GroupIDs
+func flattenGroupIdentifiers(dtos []ec2.GroupIdentifier) []string {
+	ids := make([]string, 0, len(dtos))
+	for _, v := range dtos {
+		group_id := *v.GroupID
+		ids = append(ids, group_id)
+	}
+	return ids
+}
+
+//Expands an array of IPs into a ec2 Private IP Address Spec
+func expandPrivateIPAddesses(ips []interface{}) []ec2.PrivateIPAddressSpecification {
+	dtos := make([]ec2.PrivateIPAddressSpecification, 0, len(ips))
+	for i, v := range ips {
+		new_private_ip := ec2.PrivateIPAddressSpecification{
+			PrivateIPAddress: aws.String(v.(string)),
+		}
+
+		new_private_ip.Primary = aws.Boolean(i == 0)
+
+		dtos = append(dtos, new_private_ip)
+	}
+	return dtos
+}
+
+//Flattens network interface attachment into a map[string]interface
+func flattenAttachment(a *ec2.NetworkInterfaceAttachment) map[string]interface{} {
+	att := make(map[string]interface{})
+	att["instance"] = *a.InstanceID
+	att["device_index"] = *a.DeviceIndex
+	att["attachment_id"] = *a.AttachmentID
+	return att
 }
