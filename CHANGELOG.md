@@ -14,6 +14,7 @@ FEATURES:
   * **New provider: `dme` (DNSMadeEasy)** [GH-855]
   * **New command: `taint`** - Manually mark a resource as tainted, causing
       a destroy and recreate on the next plan/apply.
+  * **New resource: `aws_vpn_gateway`** [GH-1137]
   * **Self-variables** can be used to reference the current resource's
       attributes within a provisioner. Ex. `${self.private_ip_address}` [GH-1033]
   * **Continous state** saving during `terraform apply`. The state file is
@@ -33,6 +34,7 @@ IMPROVEMENTS:
   * **New config function: `split`** - Split a value based on a delimiter.
       This is useful for faking lists as parameters to modules.
   * **New resource: `digitalocean_ssh_key`** [GH-1074]
+  * **New resource: `aws_elastic_network_interfaces`** [GH-1149]
   * core: The serial of the state is only updated if there is an actual
       change. This will lower the amount of state changing on things
       like refresh.
