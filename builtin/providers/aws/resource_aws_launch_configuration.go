@@ -11,6 +11,7 @@ import (
 
 	"github.com/hashicorp/aws-sdk-go/aws"
 	"github.com/hashicorp/aws-sdk-go/gen/autoscaling"
+	"github.com/hashicorp/aws-sdk-go/gen/ec2"
 	"github.com/hashicorp/terraform/helper/hashcode"
 	"github.com/hashicorp/terraform/helper/resource"
 	"github.com/hashicorp/terraform/helper/schema"
@@ -247,6 +248,7 @@ func resourceAwsLaunchConfiguration() *schema.Resource {
 
 func resourceAwsLaunchConfigurationCreate(d *schema.ResourceData, meta interface{}) error {
 	autoscalingconn := meta.(*AWSClient).autoscalingconn
+	ec2conn := meta.(*AWSClient).ec2conn
 
 	// Figure out user data
 	userData := ""
@@ -350,7 +352,7 @@ func resourceAwsLaunchConfigurationCreate(d *schema.ResourceData, meta interface
 				ebs.IOPS = aws.Integer(v)
 			}
 
-			if dn, err := fetchRootDeviceName(d.Get("ami").(string), meta.(*AWSClient).ec2conn); err == nil {
+			if dn, err := fetchRootDeviceName(d.Get("ami").(string), ec2conn); err == nil {
 				blockDevices = append(blockDevices, autoscaling.BlockDeviceMapping{
 					DeviceName: dn,
 					EBS:        ebs,
@@ -383,6 +385,7 @@ func resourceAwsLaunchConfigurationCreate(d *schema.ResourceData, meta interface
 
 func resourceAwsLaunchConfigurationRead(d *schema.ResourceData, meta interface{}) error {
 	autoscalingconn := meta.(*AWSClient).autoscalingconn
+	ec2conn := meta.(*AWSClient).ec2conn
 
 	describeOpts := autoscaling.LaunchConfigurationNamesType{
 		LaunchConfigurationNames: []string{d.Id()},
@@ -441,6 +444,10 @@ func resourceAwsLaunchConfigurationRead(d *schema.ResourceData, meta interface{}
 		d.Set("security_groups", nil)
 	}
 
+	if err := readLCBlockDevices(d, &lc, ec2conn); err != nil {
+		return err
+	}
+
 	return nil
 }
 
@@ -462,8 +469,61 @@ func resourceAwsLaunchConfigurationDelete(d *schema.ResourceData, meta interface
 	return nil
 }
 
-func readBlockDevicesFromLaunchConfiguration(d *schema.ResourceData, launchConfiguration *autoscaling.LaunchConfiguration, autoscalingconn *autoscaling.AutoScaling) map[string]interface{} {
-	var blockDevices = make(map[string]interface{})
-	// Need to figure out how to determine the various instance types.
-	return blockDevices
+func readLCBlockDevices(d *schema.ResourceData, lc *autoscaling.LaunchConfiguration, ec2conn *ec2.EC2) error {
+	ibds, err := readBlockDevicesFromLaunchConfiguration(d, lc, ec2conn)
+	if err != nil {
+		return err
+	}
+
+	if err := d.Set("ebs_block_device", ibds["ebs"]); err != nil {
+		return err
+	}
+	if ibds["root"] != nil {
+		if err := d.Set("root_block_device", []interface{}{ibds["root"]}); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func readBlockDevicesFromLaunchConfiguration(d *schema.ResourceData, lc *autoscaling.LaunchConfiguration, ec2conn *ec2.EC2) (
+	map[string]interface{}, error) {
+	blockDevices := make(map[string]interface{})
+	blockDevices["ebs"] = make([]map[string]interface{}, 0)
+	blockDevices["root"] = nil
+	if len(lc.BlockDeviceMappings) == 0 {
+		return nil, nil
+	}
+	rootDeviceName, err := fetchRootDeviceName(d.Get("ami").(string), ec2conn)
+	if err == nil {
+		return nil, err
+	}
+	for _, bdm := range lc.BlockDeviceMappings {
+		bd := make(map[string]interface{})
+		if bdm.EBS != nil && bdm.EBS.DeleteOnTermination != nil {
+			bd["delete_on_termination"] = *bdm.EBS.DeleteOnTermination
+		}
+		if bdm.EBS != nil && bdm.EBS.VolumeSize != nil {
+			bd["volume_size"] = bdm.EBS.VolumeSize
+		}
+		if bdm.EBS != nil && bdm.EBS.VolumeType != nil {
+			bd["volume_type"] = *bdm.EBS.VolumeType
+		}
+		if bdm.EBS != nil && bdm.EBS.IOPS != nil {
+			bd["iops"] = *bdm.EBS.IOPS
+		}
+		if bdm.DeviceName != nil && bdm.DeviceName == rootDeviceName {
+			blockDevices["root"] = bd
+		} else {
+			if bdm.DeviceName != nil {
+				bd["device_name"] = *bdm.DeviceName
+			}
+			if bdm.EBS != nil && bdm.EBS.SnapshotID != nil {
+				bd["snapshot_id"] = *bdm.EBS.SnapshotID
+			}
+			blockDevices["ebs"] = append(blockDevices["ebs"].([]map[string]interface{}), bd)
+		}
+	}
+	return blockDevices, nil
 }
