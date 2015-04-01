@@ -193,15 +193,15 @@ func resourceAwsAutoscalingGroupRead(d *schema.ResourceData, meta interface{}) e
 	}
 
 	d.Set("availability_zones", g.AvailabilityZones)
-	d.Set("default_cooldown", *g.DefaultCooldown)
-	d.Set("desired_capacity", *g.DesiredCapacity)
-	d.Set("health_check_grace_period", *g.HealthCheckGracePeriod)
-	d.Set("health_check_type", *g.HealthCheckType)
-	d.Set("launch_configuration", *g.LaunchConfigurationName)
+	d.Set("default_cooldown", g.DefaultCooldown)
+	d.Set("desired_capacity", g.DesiredCapacity)
+	d.Set("health_check_grace_period", g.HealthCheckGracePeriod)
+	d.Set("health_check_type", g.HealthCheckType)
+	d.Set("launch_configuration", g.LaunchConfigurationName)
 	d.Set("load_balancers", g.LoadBalancerNames)
-	d.Set("min_size", *g.MinSize)
-	d.Set("max_size", *g.MaxSize)
-	d.Set("name", *g.AutoScalingGroupName)
+	d.Set("min_size", g.MinSize)
+	d.Set("max_size", g.MaxSize)
+	d.Set("name", g.AutoScalingGroupName)
 	d.Set("tag", g.Tags)
 	d.Set("vpc_zone_identifier", strings.Split(*g.VPCZoneIdentifier, ","))
 	d.Set("termination_policies", g.TerminationPolicies)
@@ -287,7 +287,12 @@ func resourceAwsAutoscalingGroupDelete(d *schema.ResourceData, meta interface{})
 		return err
 	}
 
-	return nil
+	return resource.Retry(5*time.Minute, func() error {
+		if g, _ = getAwsAutoscalingGroup(d, meta); g != nil {
+			return fmt.Errorf("Auto Scaling Group still exists")
+		}
+		return nil
+	})
 }
 
 func getAwsAutoscalingGroup(
