@@ -92,12 +92,6 @@ func resourceAwsLaunchConfiguration() *schema.Resource {
 				ForceNew: true,
 			},
 
-			"block_device": &schema.Schema{
-				Type:     schema.TypeMap,
-				Optional: true,
-				Removed:  "Split out into three sub-types; see Changelog and Docs",
-			},
-
 			"ebs_block_device": &schema.Schema{
 				Type:     schema.TypeSet,
 				Optional: true,
