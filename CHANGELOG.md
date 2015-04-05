@@ -1,4 +1,8 @@
-## 0.4.0 (unreleased)
+## 0.4.1 (unreleased)
+
+
+
+## 0.4.0 (April 2, 2015)
 
 BACKWARDS INCOMPATIBILITIES:
 
@@ -8,6 +12,11 @@ BACKWARDS INCOMPATIBILITIES:
     consolidates all remote state management under one command.
   * Period-prefixed configuration files are now ignored. This might break
     existing Terraform configurations if you had period-prefixed files.
+  * The `block_device` attribute of `aws_instance` has been removed in favor
+    of three more specific attributes to specify block device mappings: 
+    `root_block_device`, `ebs_block_device`, and `ephemeral_block_device`.
+    Configurations using the old attribute will generate a validation error
+    indicating that they must be updated to use the new fields [GH-1045].
 
 FEATURES:
 
@@ -16,6 +25,9 @@ FEATURES:
       using the standard Docker API. [GH-855]
   * **New provider: `openstack` (OpenStack)** - Interact with the many resources
       provided by OpenStack. [GH-924]
+  * **New feature: `terraform_remote_state` resource** - Reference remote
+      states from other Terraform runs to use Terraform outputs as inputs
+      into another Terraform run.
   * **New command: `taint`** - Manually mark a resource as tainted, causing
       a destroy and recreate on the next plan/apply.
   * **New resource: `aws_vpn_gateway`** [GH-1137]
@@ -56,7 +68,13 @@ IMPROVEMENTS:
   * providers/aws: Add a short syntax for Route 53 Record names, e.g.
       `www` instead of `www.example.com`.
   * providers/aws: Improve dependency violation error handling, when deleting
-    Internet Gateways or Auto Scaling groups [GH-1325].
+      Internet Gateways or Auto Scaling groups [GH-1325].
+  * provider/aws: Add non-destructive updates to AWS RDS. You can now upgrade
+      `egine_version`, `parameter_group_name`, and `multi_az` without forcing
+      a new database to be created.[GH-1341]
+  * providers/aws: Full support for block device mappings on instances and
+      launch configurations [GH-1045, GH-1364]
+  * provisioners/remote-exec: SSH agent support. [GH-1208]
 
 BUG FIXES:
 

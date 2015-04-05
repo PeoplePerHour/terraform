@@ -3,7 +3,7 @@ layout: "openstack"
 page_title: "OpenStack: openstack_blockstorage_volume_v1"
 sidebar_current: "docs-openstack-resource-blockstorage-volume-v1"
 description: |-
-Manages a V1 volume resource within OpenStack.
+  Manages a V1 volume resource within OpenStack.
 ---
 
 # openstack\_blockstorage\_volume_v1
@@ -66,3 +66,6 @@ The following attributes are exported:
 * `snapshot_id` - See Argument Reference above.
 * `metadata` - See Argument Reference above.
 * `volume_type` - See Argument Reference above.
+* `attachment` - If a volume is attached to an instance, this attribute will
+    display the Attachment ID, Instance ID, and the Device as the Instance
+    sees it.
