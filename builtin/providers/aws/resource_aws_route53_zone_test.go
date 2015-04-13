@@ -6,7 +6,6 @@ import (
 	"testing"
 
 	"github.com/hashicorp/terraform/helper/resource"
-	"github.com/hashicorp/terraform/helper/schema"
 	"github.com/hashicorp/terraform/terraform"
 
 	"github.com/awslabs/aws-sdk-go/aws"
@@ -64,8 +63,8 @@ func TestCleanChangeID(t *testing.T) {
 	}
 }
 
-func TestAccRoute53Zone_basic(t *testing.T) {
-	var zone route53.GetHostedZoneOutput
+func TestAccRoute53Zone(t *testing.T) {
+	var zone route53.HostedZone
 	var td route53.ResourceTagSet
 
 	resource.Test(t, resource.TestCase{
@@ -85,8 +84,8 @@ func TestAccRoute53Zone_basic(t *testing.T) {
 	})
 }
 
-func TestAccRoute53Zone_private_basic(t *testing.T) {
-	var zone route53.GetHostedZoneOutput
+func TestAccRoute53PrivateZone(t *testing.T) {
+	var zone route53.HostedZone
 
 	resource.Test(t, resource.TestCase{
 		PreCheck:     func() { testAccPreCheck(t) },
@@ -97,37 +96,6 @@ func TestAccRoute53Zone_private_basic(t *testing.T) {
 				Config: testAccRoute53PrivateZoneConfig,
 				Check: resource.ComposeTestCheckFunc(
 					testAccCheckRoute53ZoneExists("aws_route53_zone.main", &zone),
-					testAccCheckRoute53ZoneAssociatesWithVpc("aws_vpc.main", &zone),
-				),
-			},
-		},
-	})
-}
-
-func TestAccRoute53Zone_private_region(t *testing.T) {
-	var zone route53.GetHostedZoneOutput
-
-	// record the initialized providers so that we can use them to
-	// check for the instances in each region
-	var providers []*schema.Provider
-	providerFactories := map[string]terraform.ResourceProviderFactory{
-		"aws": func() (terraform.ResourceProvider, error) {
-			p := Provider()
-			providers = append(providers, p.(*schema.Provider))
-			return p, nil
-		},
-	}
-
-	resource.Test(t, resource.TestCase{
-		PreCheck:          func() { testAccPreCheck(t) },
-		ProviderFactories: providerFactories,
-		CheckDestroy:      testAccCheckRoute53ZoneDestroyWithProviders(&providers),
-		Steps: []resource.TestStep{
-			resource.TestStep{
-				Config: testAccRoute53PrivateZoneRegionConfig,
-				Check: resource.ComposeTestCheckFunc(
-					testAccCheckRoute53ZoneExistsWithProviders("aws_route53_zone.main", &zone, &providers),
-					testAccCheckRoute53ZoneAssociatesWithVpc("aws_vpc.main", &zone),
 				),
 			},
 		},
@@ -135,25 +103,7 @@ func TestAccRoute53Zone_private_region(t *testing.T) {
 }
 
 func testAccCheckRoute53ZoneDestroy(s *terraform.State) error {
-	return testAccCheckRoute53ZoneDestroyWithProvider(s, testAccProvider)
-}
-
-func testAccCheckRoute53ZoneDestroyWithProviders(providers *[]*schema.Provider) resource.TestCheckFunc {
-	return func(s *terraform.State) error {
-		for _, provider := range *providers {
-			if provider.Meta() == nil {
-				continue
-			}
-			if err := testAccCheckRoute53ZoneDestroyWithProvider(s, provider); err != nil {
-				return err
-			}
-		}
-		return nil
-	}
-}
-
-func testAccCheckRoute53ZoneDestroyWithProvider(s *terraform.State, provider *schema.Provider) error {
-	conn := provider.Meta().(*AWSClient).r53conn
+	conn := testAccProvider.Meta().(*AWSClient).r53conn
 	for _, rs := range s.RootModule().Resources {
 		if rs.Type != "aws_route53_zone" {
 			continue
@@ -167,43 +117,23 @@ func testAccCheckRoute53ZoneDestroyWithProvider(s *terraform.State, provider *sc
 	return nil
 }
 
-func testAccCheckRoute53ZoneExists(n string, zone *route53.GetHostedZoneOutput) resource.TestCheckFunc {
+func testAccCheckRoute53ZoneExists(n string, zone *route53.HostedZone) resource.TestCheckFunc {
 	return func(s *terraform.State) error {
-		return testAccCheckRoute53ZoneExistsWithProvider(s, n, zone, testAccProvider)
-	}
-}
-
-func testAccCheckRoute53ZoneExistsWithProviders(n string, zone *route53.GetHostedZoneOutput, providers *[]*schema.Provider) resource.TestCheckFunc {
-	return func(s *terraform.State) error {
-		for _, provider := range *providers {
-			if provider.Meta() == nil {
-				continue
-			}
-			if err := testAccCheckRoute53ZoneExistsWithProvider(s, n, zone, provider); err != nil {
-				return err
-			}
+		rs, ok := s.RootModule().Resources[n]
+		if !ok {
+			return fmt.Errorf("Not found: %s", n)
 		}
-		return nil
-	}
-}
 
-func testAccCheckRoute53ZoneExistsWithProvider(s *terraform.State, n string, zone *route53.GetHostedZoneOutput, provider *schema.Provider) error {
-	rs, ok := s.RootModule().Resources[n]
-	if !ok {
-		return fmt.Errorf("Not found: %s", n)
-	}
+		if rs.Primary.ID == "" {
+			return fmt.Errorf("No hosted zone ID is set")
+		}
 
-	if rs.Primary.ID == "" {
-		return fmt.Errorf("No hosted zone ID is set")
-	}
+		conn := testAccProvider.Meta().(*AWSClient).r53conn
+		resp, err := conn.GetHostedZone(&route53.GetHostedZoneInput{ID: aws.String(rs.Primary.ID)})
+		if err != nil {
+			return fmt.Errorf("Hosted zone err: %v", err)
+		}
 
-	conn := provider.Meta().(*AWSClient).r53conn
-	resp, err := conn.GetHostedZone(&route53.GetHostedZoneInput{ID: aws.String(rs.Primary.ID)})
-	if err != nil {
-		return fmt.Errorf("Hosted zone err: %v", err)
-	}
-
-	if !*resp.HostedZone.Config.PrivateZone {
 		sorted_ns := make([]string, len(resp.DelegationSet.NameServers))
 		for i, ns := range resp.DelegationSet.NameServers {
 			sorted_ns[i] = *ns
@@ -216,41 +146,17 @@ func testAccCheckRoute53ZoneExistsWithProvider(s *terraform.State, n string, zon
 				return fmt.Errorf("Got: %v for %v, Expected: %v", dsns, attribute, ns)
 			}
 		}
-	}
 
-	*zone = *resp
-	return nil
-}
-
-func testAccCheckRoute53ZoneAssociatesWithVpc(n string, zone *route53.GetHostedZoneOutput) resource.TestCheckFunc {
-	return func(s *terraform.State) error {
-		rs, ok := s.RootModule().Resources[n]
-		if !ok {
-			return fmt.Errorf("Not found: %s", n)
-		}
-
-		if rs.Primary.ID == "" {
-			return fmt.Errorf("No VPC ID is set")
-		}
-
-		var associatedVPC *route53.VPC
-		for _, vpc := range zone.VPCs {
-			if *vpc.VPCID == rs.Primary.ID {
-				associatedVPC = vpc
-			}
-		}
-		if associatedVPC == nil {
-			return fmt.Errorf("VPC: %v is not associated to Zone: %v", n, cleanZoneID(*zone.HostedZone.ID))
-		}
+		*zone = *resp.HostedZone
 		return nil
 	}
 }
 
-func testAccLoadTagsR53(zone *route53.GetHostedZoneOutput, td *route53.ResourceTagSet) resource.TestCheckFunc {
+func testAccLoadTagsR53(zone *route53.HostedZone, td *route53.ResourceTagSet) resource.TestCheckFunc {
 	return func(s *terraform.State) error {
 		conn := testAccProvider.Meta().(*AWSClient).r53conn
 
-		zone := cleanZoneID(*zone.HostedZone.ID)
+		zone := cleanZoneID(*zone.ID)
 		req := &route53.ListTagsForResourceInput{
 			ResourceID:   aws.String(zone),
 			ResourceType: aws.String("hostedzone"),
@@ -291,32 +197,5 @@ resource "aws_vpc" "main" {
 resource "aws_route53_zone" "main" {
 	name = "hashicorp.com"
 	vpc_id = "${aws_vpc.main.id}"
-}
-`
-
-const testAccRoute53PrivateZoneRegionConfig = `
-provider "aws" {
-	alias = "west"
-	region = "us-west-2"
-}
-
-provider "aws" {
-	alias = "east"
-	region = "us-east-1"
-}
-
-resource "aws_vpc" "main" {
-	provider = "aws.east"
-	cidr_block = "172.29.0.0/24"
-	instance_tenancy = "default"
-	enable_dns_support = true
-	enable_dns_hostnames = true
-}
-
-resource "aws_route53_zone" "main" {
-	provider = "aws.west"
-	name = "hashicorp.com"
-	vpc_id = "${aws_vpc.main.id}"
-	vpc_region = "us-east-1"
 }
 `
