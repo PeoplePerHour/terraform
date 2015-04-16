@@ -5,9 +5,9 @@ import (
 	"log"
 	"time"
 
-	"github.com/hashicorp/aws-sdk-go/aws"
-	"github.com/hashicorp/aws-sdk-go/gen/iam"
-	"github.com/hashicorp/aws-sdk-go/gen/rds"
+	"github.com/awslabs/aws-sdk-go/aws"
+	"github.com/awslabs/aws-sdk-go/service/iam"
+	"github.com/awslabs/aws-sdk-go/service/rds"
 
 	"github.com/hashicorp/terraform/helper/hashcode"
 	"github.com/hashicorp/terraform/helper/resource"
@@ -37,7 +37,6 @@ func resourceAwsDbInstance() *schema.Resource {
 			"password": &schema.Schema{
 				Type:     schema.TypeString,
 				Required: true,
-				ForceNew: true,
 			},
 
 			"engine": &schema.Schema{
@@ -60,14 +59,12 @@ func resourceAwsDbInstance() *schema.Resource {
 			"allocated_storage": &schema.Schema{
 				Type:     schema.TypeInt,
 				Required: true,
-				ForceNew: true,
 			},
 
 			"storage_type": &schema.Schema{
 				Type:     schema.TypeString,
 				Optional: true,
 				Computed: true,
-				ForceNew: true,
 			},
 
 			"identifier": &schema.Schema{
@@ -79,7 +76,6 @@ func resourceAwsDbInstance() *schema.Resource {
 			"instance_class": &schema.Schema{
 				Type:     schema.TypeString,
 				Required: true,
-				ForceNew: true,
 			},
 
 			"availability_zone": &schema.Schema{
@@ -92,7 +88,6 @@ func resourceAwsDbInstance() *schema.Resource {
 			"backup_retention_period": &schema.Schema{
 				Type:     schema.TypeInt,
 				Optional: true,
-				ForceNew: true,
 				Default:  1,
 			},
 
@@ -100,20 +95,17 @@ func resourceAwsDbInstance() *schema.Resource {
 				Type:     schema.TypeString,
 				Optional: true,
 				Computed: true,
-				ForceNew: true,
 			},
 
 			"iops": &schema.Schema{
 				Type:     schema.TypeInt,
 				Optional: true,
-				ForceNew: true,
 			},
 
 			"maintenance_window": &schema.Schema{
 				Type:     schema.TypeString,
 				Optional: true,
 				Computed: true,
-				ForceNew: true,
 			},
 
 			"multi_az": &schema.Schema{
@@ -204,8 +196,8 @@ func resourceAwsDbInstance() *schema.Resource {
 func resourceAwsDbInstanceCreate(d *schema.ResourceData, meta interface{}) error {
 	conn := meta.(*AWSClient).rdsconn
 	tags := tagsFromMapRDS(d.Get("tags").(map[string]interface{}))
-	opts := rds.CreateDBInstanceMessage{
-		AllocatedStorage:     aws.Integer(d.Get("allocated_storage").(int)),
+	opts := rds.CreateDBInstanceInput{
+		AllocatedStorage:     aws.Long(int64(d.Get("allocated_storage").(int))),
 		DBInstanceClass:      aws.String(d.Get("instance_class").(string)),
 		DBInstanceIdentifier: aws.String(d.Get("identifier").(string)),
 		DBName:               aws.String(d.Get("name").(string)),
@@ -222,14 +214,14 @@ func resourceAwsDbInstanceCreate(d *schema.ResourceData, meta interface{}) error
 	}
 
 	attr := d.Get("backup_retention_period")
-	opts.BackupRetentionPeriod = aws.Integer(attr.(int))
+	opts.BackupRetentionPeriod = aws.Long(int64(attr.(int)))
 
 	if attr, ok := d.GetOk("iops"); ok {
-		opts.IOPS = aws.Integer(attr.(int))
+		opts.IOPS = aws.Long(int64(attr.(int)))
 	}
 
 	if attr, ok := d.GetOk("port"); ok {
-		opts.Port = aws.Integer(attr.(int))
+		opts.Port = aws.Long(int64(attr.(int)))
 	}
 
 	if attr, ok := d.GetOk("multi_az"); ok {
@@ -261,17 +253,17 @@ func resourceAwsDbInstanceCreate(d *schema.ResourceData, meta interface{}) error
 	}
 
 	if attr := d.Get("vpc_security_group_ids").(*schema.Set); attr.Len() > 0 {
-		var s []string
+		var s []*string
 		for _, v := range attr.List() {
-			s = append(s, v.(string))
+			s = append(s, aws.String(v.(string)))
 		}
 		opts.VPCSecurityGroupIDs = s
 	}
 
 	if attr := d.Get("security_group_names").(*schema.Set); attr.Len() > 0 {
-		var s []string
+		var s []*string
 		for _, v := range attr.List() {
-			s = append(s, v.(string))
+			s = append(s, aws.String(v.(string)))
 		}
 		opts.DBSecurityGroups = s
 	}
@@ -356,9 +348,14 @@ func resourceAwsDbInstanceRead(d *schema.ResourceData, meta interface{}) error {
 	conn := meta.(*AWSClient).rdsconn
 	arn, err := buildRDSARN(d, meta)
 	if err != nil {
-		log.Printf("[DEBUG] Error building ARN for DB Instance, not setting Tags for DB %s", *v.DBName)
+		name := "<empty>"
+		if v.DBName != nil && *v.DBName != "" {
+			name = *v.DBName
+		}
+
+		log.Printf("[DEBUG] Error building ARN for DB Instance, not setting Tags for DB %s", name)
 	} else {
-		resp, err := conn.ListTagsForResource(&rds.ListTagsForResourceMessage{
+		resp, err := conn.ListTagsForResource(&rds.ListTagsForResourceInput{
 			ResourceName: aws.String(arn),
 		})
 
@@ -366,7 +363,7 @@ func resourceAwsDbInstanceRead(d *schema.ResourceData, meta interface{}) error {
 			log.Printf("[DEBUG] Error retreiving tags for ARN: %s", arn)
 		}
 
-		var dt []rds.Tag
+		var dt []*rds.Tag
 		if len(resp.TagList) > 0 {
 			dt = resp.TagList
 		}
@@ -403,7 +400,7 @@ func resourceAwsDbInstanceDelete(d *schema.ResourceData, meta interface{}) error
 
 	log.Printf("[DEBUG] DB Instance destroy: %v", d.Id())
 
-	opts := rds.DeleteDBInstanceMessage{DBInstanceIdentifier: aws.String(d.Id())}
+	opts := rds.DeleteDBInstanceInput{DBInstanceIdentifier: aws.String(d.Id())}
 
 	finalSnapshot := d.Get("final_snapshot_identifier").(string)
 	if finalSnapshot == "" {
@@ -439,39 +436,82 @@ func resourceAwsDbInstanceUpdate(d *schema.ResourceData, meta interface{}) error
 	conn := meta.(*AWSClient).rdsconn
 
 	d.Partial(true)
-	// Change is used to determine if a ModifyDBInstanceMessage request actually
-	// gets sent.
-	change := false
 
-	req := &rds.ModifyDBInstanceMessage{
+	req := &rds.ModifyDBInstanceInput{
 		ApplyImmediately:     aws.Boolean(d.Get("apply_immediately").(bool)),
 		DBInstanceIdentifier: aws.String(d.Id()),
 	}
+	d.SetPartial("apply_immediately")
 
-	if d.HasChange("engine_version") {
-		change = true
-		d.SetPartial("engine_version")
-		req.EngineVersion = aws.String(d.Get("engine_version").(string))
+	if d.HasChange("allocated_storage") {
+		d.SetPartial("allocated_storage")
+		req.AllocatedStorage = aws.Long(int64(d.Get("allocated_storage").(int)))
 	}
-
-	if d.HasChange("multi_az") {
-		change = true
-		d.SetPartial("multi_az")
-		req.MultiAZ = aws.Boolean(d.Get("multi_az").(bool))
+	if d.HasChange("backup_retention_period") {
+		d.SetPartial("backup_retention_period")
+		req.BackupRetentionPeriod = aws.Long(int64(d.Get("backup_retention_period").(int)))
 	}
-
+	if d.HasChange("instance_class") {
+		d.SetPartial("instance_class")
+		req.DBInstanceClass = aws.String(d.Get("instance_class").(string))
+	}
 	if d.HasChange("parameter_group_name") {
-		change = true
 		d.SetPartial("parameter_group_name")
 		req.DBParameterGroupName = aws.String(d.Get("parameter_group_name").(string))
 	}
+	if d.HasChange("engine_version") {
+		d.SetPartial("engine_version")
+		req.EngineVersion = aws.String(d.Get("engine_version").(string))
+	}
+	if d.HasChange("iops") {
+		d.SetPartial("iops")
+		req.IOPS = aws.Long(int64(d.Get("iops").(int)))
+	}
+	if d.HasChange("backup_window") {
+		d.SetPartial("backup_window")
+		req.PreferredBackupWindow = aws.String(d.Get("backup_window").(string))
+	}
+	if d.HasChange("maintenance_window") {
+		d.SetPartial("maintenance_window")
+		req.PreferredMaintenanceWindow = aws.String(d.Get("maintenance_window").(string))
+	}
+	if d.HasChange("password") {
+		d.SetPartial("password")
+		req.MasterUserPassword = aws.String(d.Get("password").(string))
+	}
+	if d.HasChange("multi_az") {
+		d.SetPartial("multi_az")
+		req.MultiAZ = aws.Boolean(d.Get("multi_az").(bool))
+	}
+	if d.HasChange("storage_type") {
+		d.SetPartial("storage_type")
+		req.StorageType = aws.String(d.Get("storage_type").(string))
+	}
 
-	if change {
-		log.Printf("[DEBUG] DB Instance Modification request: %#v", req)
-		_, err := conn.ModifyDBInstance(req)
-		if err != nil {
-			return fmt.Errorf("Error mofigying DB Instance %s: %s", d.Id(), err)
+	if d.HasChange("vpc_security_group_ids") {
+		if attr := d.Get("vpc_security_group_ids").(*schema.Set); attr.Len() > 0 {
+			var s []*string
+			for _, v := range attr.List() {
+				s = append(s, aws.String(v.(string)))
+			}
+			req.VPCSecurityGroupIDs = s
 		}
+	}
+
+	if d.HasChange("vpc_security_group_ids") {
+		if attr := d.Get("security_group_names").(*schema.Set); attr.Len() > 0 {
+			var s []*string
+			for _, v := range attr.List() {
+				s = append(s, aws.String(v.(string)))
+			}
+			req.DBSecurityGroups = s
+		}
+	}
+
+	log.Printf("[DEBUG] DB Instance Modification request: %#v", req)
+	_, err := conn.ModifyDBInstance(req)
+	if err != nil {
+		return fmt.Errorf("Error modifying DB Instance %s: %s", d.Id(), err)
 	}
 
 	if arn, err := buildRDSARN(d, meta); err == nil {
@@ -489,7 +529,7 @@ func resourceAwsBbInstanceRetrieve(
 	d *schema.ResourceData, meta interface{}) (*rds.DBInstance, error) {
 	conn := meta.(*AWSClient).rdsconn
 
-	opts := rds.DescribeDBInstancesMessage{
+	opts := rds.DescribeDBInstancesInput{
 		DBInstanceIdentifier: aws.String(d.Id()),
 	}
 
@@ -512,9 +552,7 @@ func resourceAwsBbInstanceRetrieve(
 		}
 	}
 
-	v := resp.DBInstances[0]
-
-	return &v, nil
+	return resp.DBInstances[0], nil
 }
 
 func resourceAwsDbInstanceStateRefreshFunc(
@@ -538,8 +576,8 @@ func resourceAwsDbInstanceStateRefreshFunc(
 func buildRDSARN(d *schema.ResourceData, meta interface{}) (string, error) {
 	iamconn := meta.(*AWSClient).iamconn
 	region := meta.(*AWSClient).region
-	// An zero value GetUserRequest{} defers to the currently logged in user
-	resp, err := iamconn.GetUser(&iam.GetUserRequest{})
+	// An zero value GetUserInput{} defers to the currently logged in user
+	resp, err := iamconn.GetUser(&iam.GetUserInput{})
 	if err != nil {
 		return "", err
 	}

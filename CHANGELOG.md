@@ -1,6 +1,72 @@
-## 0.4.1 (unreleased)
+## 0.5.0 (unreleased)
 
+IMPROVEMENTS:
 
+ * core: Improve error message on diff mismatch [GH-1501]
+ * **New config function: `length`** - Get the length of a string or a list.
+      Useful in conjunction with `split`. [GH-1495]
+
+BUG FIXES:
+
+  * core: math on arbitrary variables works if first operand isn't a
+      numeric primitive. [GH-1381]
+  * core: avoid unnecessary cycles by pruning tainted destroys from
+      graph if there are no tainted resources [GH-1475]
+  * core: fix issue where destroy nodes weren't pruned in specific
+      edge cases around matching prefixes, which could cause cycles [GH-1527]
+  * core: fix issue causing diff mismatch errors in certain scenarios during
+      resource replacement [GH-1515]
+  * command: remote states with uppercase types work [GH-1356]
+  * provider/aws: launch configuration ID set after create success [GH-1518]
+  * provider/openstack: region config is not required [GH-1441]
+
+## 0.4.2 (April 10, 2015)
+
+BUG FIXES:
+
+  * core: refresh won't remove outputs from state file [GH-1369]
+  * core: clarify "unknown variable" error [GH-1480]
+  * core: properly merge parent provider configs when asking for input
+  * provider/aws: fix panic possibility if RDS DB name is empty [GH-1460]
+  * provider/aws: fix issue detecting credentials for some resources [GH-1470]
+  * provider/google: fix issue causing unresolvable diffs when using legacy
+      `network` field on `google_compute_instance` [GH-1458]
+
+## 0.4.1 (April 9, 2015)
+
+IMPROVEMENTS:
+
+  * provider/aws: Route 53 records can now update `ttl` and `records` attributes
+      without destroying/creating the record [GH-1396]
+  * provider/aws: Support changing additional attributes of RDS databases
+      without forcing a new resource  [GH-1382]
+
+BUG FIXES:
+
+  * core: module paths in ".terraform" are consistent across different
+      systems so copying your ".terraform" folder works. [GH-1418]
+  * core: don't validate providers too early when nested in a module [GH-1380]
+  * core: fix race condition in `count.index` interpolation [GH-1454]
+  * command/push: don't ask for input if terraform.tfvars is present
+  * command/remote-config: remove spurrious error "nil" when initializing
+      remote state on a new configuration. [GH-1392]
+  * provider/aws: Fix issue with Route 53 and pre-existing Hosted Zones [GH-1415]
+  * provider/aws: Fix refresh issue in Route 53 hosted zone [GH-1384]
+  * provider/aws: Fix issue when changing map-public-ip in Subnets #1234
+  * provider/aws: Fix issue finding db subnets [GH-1377]
+  * provider/aws: Fix issues with `*_block_device` attributes on instances and
+      launch configs creating unresolvable diffs when certain optional
+      parameters were omitted from the config [GH-1445]
+  * provider/aws: Fix issue with `aws_launch_configuration` causing an
+      unnecessary diff for pre-0.4 environments [GH-1371]
+  * provider/aws: Fix several related issues with `aws_launch_configuration`
+      causing unresolvable diffs [GH-1444]
+  * provider/aws: Fix issue preventing launch configurations from being valid
+      in EC2 Classic [GH-1412]
+  * provider/aws: Fix issue in updating Route 53 records on refresh/read. [GH-1430]
+  * provider/docker: Don't ask for `cert_path` input on every run [GH-1432]
+  * provider/google: Fix issue causing unresolvable diff on instances with
+      `network_interface` [GH-1427]
 
 ## 0.4.0 (April 2, 2015)
 
@@ -13,7 +79,7 @@ BACKWARDS INCOMPATIBILITIES:
   * Period-prefixed configuration files are now ignored. This might break
     existing Terraform configurations if you had period-prefixed files.
   * The `block_device` attribute of `aws_instance` has been removed in favor
-    of three more specific attributes to specify block device mappings: 
+    of three more specific attributes to specify block device mappings:
     `root_block_device`, `ebs_block_device`, and `ephemeral_block_device`.
     Configurations using the old attribute will generate a validation error
     indicating that they must be updated to use the new fields [GH-1045].

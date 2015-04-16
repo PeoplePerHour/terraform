@@ -85,6 +85,9 @@ func (i *Interpolater) valueCountVar(
 	result map[string]ast.Variable) error {
 	switch v.Type {
 	case config.CountValueIndex:
+		if scope.Resource == nil {
+			return fmt.Errorf("%s: count.index is only valid within resources", n)
+		}
 		result[n] = ast.Variable{
 			Value: scope.Resource.CountIndex,
 			Type:  ast.TypeInt,
@@ -193,7 +196,7 @@ func (i *Interpolater) valueResourceVar(
 	result map[string]ast.Variable) error {
 	// If we're computing all dynamic fields, then module vars count
 	// and we mark it as computed.
-	if i.Operation == walkValidate || i.Operation == walkRefresh {
+	if i.Operation == walkValidate {
 		result[n] = ast.Variable{
 			Value: config.UnknownVariableValue,
 			Type:  ast.TypeString,
@@ -353,6 +356,14 @@ func (i *Interpolater) computeResourceVariable(
 	}
 
 MISSING:
+	// If the operation is refresh, it isn't an error for a value to
+	// be unknown. Instead, we return that the value is computed so
+	// that the graph can continue to refresh other nodes. It doesn't
+	// matter because the config isn't interpolated anyways.
+	if i.Operation == walkRefresh {
+		return config.UnknownVariableValue, nil
+	}
+
 	return "", fmt.Errorf(
 		"Resource '%s' does not have attribute '%s' "+
 			"for variable '%s'",

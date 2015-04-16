@@ -44,6 +44,7 @@ func TestPush_good(t *testing.T) {
 	}
 
 	args := []string{
+		"-vcs=false",
 		testFixturePath("push"),
 	}
 	if code := c.Run(args); code != 0 {
@@ -107,6 +108,7 @@ func TestPush_input(t *testing.T) {
 	defaultInputWriter = new(bytes.Buffer)
 
 	args := []string{
+		"-vcs=false",
 		testFixturePath("push-input"),
 	}
 	if code := c.Run(args); code != 0 {
@@ -161,10 +163,81 @@ func TestPush_inputPartial(t *testing.T) {
 	defaultInputWriter = new(bytes.Buffer)
 
 	args := []string{
+		"-vcs=false",
 		testFixturePath("push-input-partial"),
 	}
 	if code := c.Run(args); code != 0 {
 		t.Fatalf("bad: %d\n\n%s", code, ui.ErrorWriter.String())
+	}
+
+	variables := map[string]string{
+		"foo": "bar",
+		"bar": "foo",
+	}
+	if !reflect.DeepEqual(client.UpsertOptions.Variables, variables) {
+		t.Fatalf("bad: %#v", client.UpsertOptions)
+	}
+}
+
+func TestPush_inputTfvars(t *testing.T) {
+	// Disable test mode so input would be asked and setup the
+	// input reader/writers.
+	test = false
+	defer func() { test = true }()
+	defaultInputReader = bytes.NewBufferString("nope\n")
+	defaultInputWriter = new(bytes.Buffer)
+
+	tmp, cwd := testCwd(t)
+	defer testFixCwd(t, tmp, cwd)
+
+	// Create remote state file, this should be pulled
+	conf, srv := testRemoteState(t, testState(), 200)
+	defer srv.Close()
+
+	// Persist local remote state
+	s := terraform.NewState()
+	s.Serial = 5
+	s.Remote = conf
+	testStateFileRemote(t, s)
+
+	// Path where the archive will be "uploaded" to
+	archivePath := testTempFile(t)
+	defer os.Remove(archivePath)
+
+	client := &mockPushClient{File: archivePath}
+	ui := new(cli.MockUi)
+	c := &PushCommand{
+		Meta: Meta{
+			ContextOpts: testCtxConfig(testProvider()),
+			Ui:          ui,
+		},
+
+		client: client,
+	}
+
+	path := testFixturePath("push-tfvars")
+	args := []string{
+		"-var-file", path + "/terraform.tfvars",
+		"-vcs=false",
+		path,
+	}
+	if code := c.Run(args); code != 0 {
+		t.Fatalf("bad: %d\n\n%s", code, ui.ErrorWriter.String())
+	}
+
+	actual := testArchiveStr(t, archivePath)
+	expected := []string{
+		".terraform/",
+		".terraform/terraform.tfstate",
+		"main.tf",
+		"terraform.tfvars",
+	}
+	if !reflect.DeepEqual(actual, expected) {
+		t.Fatalf("bad: %#v", actual)
+	}
+
+	if client.UpsertOptions.Name != "foo" {
+		t.Fatalf("bad: %#v", client.UpsertOptions)
 	}
 
 	variables := map[string]string{
@@ -207,6 +280,7 @@ func TestPush_name(t *testing.T) {
 
 	args := []string{
 		"-name", "bar",
+		"-vcs=false",
 		testFixturePath("push"),
 	}
 	if code := c.Run(args); code != 0 {

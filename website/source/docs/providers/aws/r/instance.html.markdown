@@ -35,9 +35,9 @@ The following arguments are supported:
      EBS-optimized.
 * `instance_type` - (Required) The type of instance to start
 * `key_name` - (Optional) The key name to use for the instance.
-* `security_groups` - (Optional) A list of security group IDs or names to associate with.
-   If you are within a non-default VPC, you'll need to use the security group ID. Otherwise,
-   for EC2 and the default VPC, use the security group name.
+* `security_groups` - (Optional) A list of security group names to associate with.
+   If you are within a non-default VPC, you'll need to use `vpc_security_group_ids` instead.
+* `vpc_security_group_ids` - (Optional) A list of security group IDs to associate with.
 * `subnet_id` - (Optional) The VPC Subnet ID to launch in.
 * `associate_public_ip_address` - (Optional) Associate a public ip address with an instance in a VPC.
 * `private_ip` - (Optional) Private IP address to associate with the
@@ -109,15 +109,10 @@ list](http://docs.aws.amazon.com/AWSEC2/latest/UserGuide/InstanceStorage.html#St
 of which ephemeral devices are available on each type. The devices are always
 identified by the `virtual_name` in the format `"ephemeral{0..N}"`.
 
-
-~> **NOTE:** Because AWS [does not expose Instance Store mapping
-details](http://docs.aws.amazon.com/AWSEC2/latest/UserGuide/block-device-mapping-concepts.html#bdm-instance-metadata)
-via an externally accessible API, `ephemeral_block_device` configuration may
-only be applied at instance creation time, and changes to configuration of
-existing resources cannot be detected by Terraform. Updates to Instance Store
-block device configuration can be manually triggered by using the [`taint`
-command](/docs/commands/taint.html).
-
+~> **NOTE:** Currently, changes to `*_block_device` configuration of _existing_
+resources cannot be automatically detected by Terraform. After making updates
+to block device configuration, resource recreation can be manually triggered by
+using the [`taint` command](/docs/commands/taint.html).
 
 ## Attributes Reference
 
@@ -131,4 +126,5 @@ The following attributes are exported:
 * `public_dns` - The public DNS name of the instance
 * `public_ip` - The public IP address.
 * `security_groups` - The associated security groups.
+* `vpc_security_group_ids` - The associated security groups in non-default VPC
 * `subnet_id` - The VPC subnet ID.

@@ -18,6 +18,7 @@ func resourceAwsRoute53Record() *schema.Resource {
 	return &schema.Resource{
 		Create: resourceAwsRoute53RecordCreate,
 		Read:   resourceAwsRoute53RecordRead,
+		Update: resourceAwsRoute53RecordUpdate,
 		Delete: resourceAwsRoute53RecordDelete,
 
 		Schema: map[string]*schema.Schema{
@@ -42,14 +43,12 @@ func resourceAwsRoute53Record() *schema.Resource {
 			"ttl": &schema.Schema{
 				Type:     schema.TypeInt,
 				Required: true,
-				ForceNew: true,
 			},
 
 			"records": &schema.Schema{
 				Type:     schema.TypeSet,
 				Elem:     &schema.Schema{Type: schema.TypeString},
 				Required: true,
-				ForceNew: true,
 				Set: func(v interface{}) int {
 					return hashcode.String(v.(string))
 				},
@@ -58,9 +57,22 @@ func resourceAwsRoute53Record() *schema.Resource {
 	}
 }
 
+func resourceAwsRoute53RecordUpdate(d *schema.ResourceData, meta interface{}) error {
+	// Route 53 supports CREATE, DELETE, and UPSERT actions. We use UPSERT, and
+	// AWS dynamically determines if a record should be created or updated.
+	// Amazon Route 53 can update an existing resource record set only when all
+	// of the following values match: Name, Type
+	// (and SetIdentifier, which we don't use yet).
+	// See http://docs.aws.amazon.com/Route53/latest/APIReference/API_ChangeResourceRecordSets_Requests.html#change-rrsets-request-action
+	//
+	// Because we use UPSERT, for resouce update here we simply fall through to
+	// our resource create function.
+	return resourceAwsRoute53RecordCreate(d, meta)
+}
+
 func resourceAwsRoute53RecordCreate(d *schema.ResourceData, meta interface{}) error {
 	conn := meta.(*AWSClient).r53conn
-	zone := d.Get("zone_id").(string)
+	zone := cleanZoneID(d.Get("zone_id").(string))
 
 	zoneRecord, err := conn.GetHostedZone(&route53.GetHostedZoneRequest{ID: aws.String(zone)})
 	if err != nil {
@@ -151,7 +163,7 @@ func resourceAwsRoute53RecordCreate(d *schema.ResourceData, meta interface{}) er
 func resourceAwsRoute53RecordRead(d *schema.ResourceData, meta interface{}) error {
 	conn := meta.(*AWSClient).r53conn
 
-	zone := d.Get("zone_id").(string)
+	zone := cleanZoneID(d.Get("zone_id").(string))
 
 	// get expanded name
 	zoneRecord, err := conn.GetHostedZone(&route53.GetHostedZoneRequest{ID: aws.String(zone)})
@@ -184,7 +196,10 @@ func resourceAwsRoute53RecordRead(d *schema.ResourceData, meta interface{}) erro
 
 		found = true
 
-		d.Set("records", record.ResourceRecords)
+		err := d.Set("records", flattenResourceRecords(record.ResourceRecords))
+		if err != nil {
+			return fmt.Errorf("[DEBUG] Error setting records for: %s, error: %#v", en, err)
+		}
 		d.Set("ttl", record.TTL)
 
 		break
@@ -200,7 +215,7 @@ func resourceAwsRoute53RecordRead(d *schema.ResourceData, meta interface{}) erro
 func resourceAwsRoute53RecordDelete(d *schema.ResourceData, meta interface{}) error {
 	conn := meta.(*AWSClient).r53conn
 
-	zone := d.Get("zone_id").(string)
+	zone := cleanZoneID(d.Get("zone_id").(string))
 	log.Printf("[DEBUG] Deleting resource records for zone: %s, name: %s",
 		zone, d.Get("name").(string))
 	zoneRecord, err := conn.GetHostedZone(&route53.GetHostedZoneRequest{ID: aws.String(zone)})
@@ -266,18 +281,8 @@ func resourceAwsRoute53RecordDelete(d *schema.ResourceData, meta interface{}) er
 
 func resourceAwsRoute53RecordBuildSet(d *schema.ResourceData, zoneName string) (*route53.ResourceRecordSet, error) {
 	recs := d.Get("records").(*schema.Set).List()
-	records := make([]route53.ResourceRecord, 0, len(recs))
 
-	typeStr := d.Get("type").(string)
-	for _, r := range recs {
-		switch typeStr {
-		case "TXT":
-			str := fmt.Sprintf("\"%s\"", r.(string))
-			records = append(records, route53.ResourceRecord{Value: aws.String(str)})
-		default:
-			records = append(records, route53.ResourceRecord{Value: aws.String(r.(string))})
-		}
-	}
+	records := expandResourceRecords(recs, d.Get("type").(string))
 
 	// get expanded name
 	en := expandRecordName(d.Get("name").(string), zoneName)

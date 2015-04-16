@@ -140,25 +140,25 @@ func TestAccAWSInstance_blockDevices(t *testing.T) {
 					resource.TestCheckResourceAttr(
 						"aws_instance.foo", "root_block_device.#", "1"),
 					resource.TestCheckResourceAttr(
-						"aws_instance.foo", "root_block_device.1023169747.volume_size", "11"),
+						"aws_instance.foo", "root_block_device.0.volume_size", "11"),
 					resource.TestCheckResourceAttr(
-						"aws_instance.foo", "root_block_device.1023169747.volume_type", "gp2"),
+						"aws_instance.foo", "root_block_device.0.volume_type", "gp2"),
 					resource.TestCheckResourceAttr(
 						"aws_instance.foo", "ebs_block_device.#", "2"),
 					resource.TestCheckResourceAttr(
-						"aws_instance.foo", "ebs_block_device.2225977507.device_name", "/dev/sdb"),
+						"aws_instance.foo", "ebs_block_device.2576023345.device_name", "/dev/sdb"),
 					resource.TestCheckResourceAttr(
-						"aws_instance.foo", "ebs_block_device.2225977507.volume_size", "9"),
+						"aws_instance.foo", "ebs_block_device.2576023345.volume_size", "9"),
 					resource.TestCheckResourceAttr(
-						"aws_instance.foo", "ebs_block_device.2225977507.volume_type", "standard"),
+						"aws_instance.foo", "ebs_block_device.2576023345.volume_type", "standard"),
 					resource.TestCheckResourceAttr(
-						"aws_instance.foo", "ebs_block_device.1977224956.device_name", "/dev/sdc"),
+						"aws_instance.foo", "ebs_block_device.2554893574.device_name", "/dev/sdc"),
 					resource.TestCheckResourceAttr(
-						"aws_instance.foo", "ebs_block_device.1977224956.volume_size", "10"),
+						"aws_instance.foo", "ebs_block_device.2554893574.volume_size", "10"),
 					resource.TestCheckResourceAttr(
-						"aws_instance.foo", "ebs_block_device.1977224956.volume_type", "io1"),
+						"aws_instance.foo", "ebs_block_device.2554893574.volume_type", "io1"),
 					resource.TestCheckResourceAttr(
-						"aws_instance.foo", "ebs_block_device.1977224956.iops", "100"),
+						"aws_instance.foo", "ebs_block_device.2554893574.iops", "100"),
 					resource.TestCheckResourceAttr(
 						"aws_instance.foo", "ephemeral_block_device.#", "1"),
 					resource.TestCheckResourceAttr(
@@ -236,7 +236,7 @@ func TestAccAWSInstance_vpc(t *testing.T) {
 	})
 }
 
-func TestAccInstance_NetworkInstanceSecurityGroups(t *testing.T) {
+func TestAccAWSInstance_NetworkInstanceSecurityGroups(t *testing.T) {
 	var v ec2.Instance
 
 	resource.Test(t, resource.TestCase{
@@ -246,6 +246,25 @@ func TestAccInstance_NetworkInstanceSecurityGroups(t *testing.T) {
 		Steps: []resource.TestStep{
 			resource.TestStep{
 				Config: testAccInstanceNetworkInstanceSecurityGroups,
+				Check: resource.ComposeTestCheckFunc(
+					testAccCheckInstanceExists(
+						"aws_instance.foo_instance", &v),
+				),
+			},
+		},
+	})
+}
+
+func TestAccAWSInstance_NetworkInstanceVPCSecurityGroupIDs(t *testing.T) {
+	var v ec2.Instance
+
+	resource.Test(t, resource.TestCase{
+		PreCheck:     func() { testAccPreCheck(t) },
+		Providers:    testAccProviders,
+		CheckDestroy: testAccCheckInstanceDestroy,
+		Steps: []resource.TestStep{
+			resource.TestStep{
+				Config: testAccInstanceNetworkInstanceVPCSecurityGroupIDs,
 				Check: resource.ComposeTestCheckFunc(
 					testAccCheckInstanceExists(
 						"aws_instance.foo_instance", &v),
@@ -636,6 +655,51 @@ resource "aws_instance" "foo_instance" {
   security_groups = ["${aws_security_group.tf_test_foo.id}"]
   subnet_id = "${aws_subnet.foo.id}"
   associate_public_ip_address = true
+	depends_on = ["aws_internet_gateway.gw"]
+}
+
+resource "aws_eip" "foo_eip" {
+  instance = "${aws_instance.foo_instance.id}"
+  vpc = true
+	depends_on = ["aws_internet_gateway.gw"]
+}
+`
+
+const testAccInstanceNetworkInstanceVPCSecurityGroupIDs = `
+resource "aws_internet_gateway" "gw" {
+  vpc_id = "${aws_vpc.foo.id}"
+}
+
+resource "aws_vpc" "foo" {
+  cidr_block = "10.1.0.0/16"
+	tags {
+		Name = "tf-network-test"
+	}
+}
+
+resource "aws_security_group" "tf_test_foo" {
+  name = "tf_test_foo"
+  description = "foo"
+  vpc_id="${aws_vpc.foo.id}"
+
+  ingress {
+    protocol = "icmp"
+    from_port = -1
+    to_port = -1
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+}
+
+resource "aws_subnet" "foo" {
+  cidr_block = "10.1.1.0/24"
+  vpc_id = "${aws_vpc.foo.id}"
+}
+
+resource "aws_instance" "foo_instance" {
+  ami = "ami-21f78e11"
+  instance_type = "t1.micro"
+  vpc_security_group_ids = ["${aws_security_group.tf_test_foo.id}"]
+  subnet_id = "${aws_subnet.foo.id}"
 	depends_on = ["aws_internet_gateway.gw"]
 }
 

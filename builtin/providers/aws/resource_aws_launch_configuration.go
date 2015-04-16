@@ -98,7 +98,7 @@ func resourceAwsLaunchConfiguration() *schema.Resource {
 				Type:     schema.TypeBool,
 				Optional: true,
 				ForceNew: true,
-				Default:  false,
+				Computed: true,
 			},
 
 			"placement_tenancy": &schema.Schema{
@@ -158,15 +158,8 @@ func resourceAwsLaunchConfiguration() *schema.Resource {
 				Set: func(v interface{}) int {
 					var buf bytes.Buffer
 					m := v.(map[string]interface{})
-					buf.WriteString(fmt.Sprintf("%t-", m["delete_on_termination"].(bool)))
 					buf.WriteString(fmt.Sprintf("%s-", m["device_name"].(string)))
-					// NOTE: Not considering IOPS in hash; when using gp2, IOPS can come
-					// back set to something like "33", which throws off the set
-					// calculation and generates an unresolvable diff.
-					// buf.WriteString(fmt.Sprintf("%d-", m["iops"].(int)))
 					buf.WriteString(fmt.Sprintf("%s-", m["snapshot_id"].(string)))
-					buf.WriteString(fmt.Sprintf("%d-", m["volume_size"].(int)))
-					buf.WriteString(fmt.Sprintf("%s-", m["volume_type"].(string)))
 					return hashcode.String(buf.String())
 				},
 			},
@@ -174,7 +167,6 @@ func resourceAwsLaunchConfiguration() *schema.Resource {
 			"ephemeral_block_device": &schema.Schema{
 				Type:     schema.TypeSet,
 				Optional: true,
-				Computed: true,
 				ForceNew: true,
 				Elem: &schema.Resource{
 					Schema: map[string]*schema.Schema{
@@ -241,14 +233,8 @@ func resourceAwsLaunchConfiguration() *schema.Resource {
 					},
 				},
 				Set: func(v interface{}) int {
-					var buf bytes.Buffer
-					m := v.(map[string]interface{})
-					buf.WriteString(fmt.Sprintf("%t-", m["delete_on_termination"].(bool)))
-					// See the NOTE in "ebs_block_device" for why we skip iops here.
-					// buf.WriteString(fmt.Sprintf("%d-", m["iops"].(int)))
-					buf.WriteString(fmt.Sprintf("%d-", m["volume_size"].(int)))
-					buf.WriteString(fmt.Sprintf("%s-", m["volume_type"].(string)))
-					return hashcode.String(buf.String())
+					// there can be only one root device; no need to hash anything
+					return 0
 				},
 			},
 		},
@@ -279,10 +265,8 @@ func resourceAwsLaunchConfigurationCreate(d *schema.ResourceData, meta interface
 		createLaunchConfigurationOpts.PlacementTenancy = aws.String(v.(string))
 	}
 
-	if v := d.Get("associate_public_ip_address"); v != nil {
+	if v, ok := d.GetOk("associate_public_ip_address"); ok {
 		createLaunchConfigurationOpts.AssociatePublicIPAddress = aws.Boolean(v.(bool))
-	} else {
-		createLaunchConfigurationOpts.AssociatePublicIPAddress = aws.Boolean(false)
 	}
 
 	if v, ok := d.GetOk("key_name"); ok {
@@ -380,23 +364,25 @@ func resourceAwsLaunchConfigurationCreate(d *schema.ResourceData, meta interface
 		createLaunchConfigurationOpts.BlockDeviceMappings = blockDevices
 	}
 
+	var id string
 	if v, ok := d.GetOk("name"); ok {
-		createLaunchConfigurationOpts.LaunchConfigurationName = aws.String(v.(string))
-		d.SetId(d.Get("name").(string))
+		id = v.(string)
 	} else {
 		hash := sha1.Sum([]byte(fmt.Sprintf("%#v", createLaunchConfigurationOpts)))
-		config_name := fmt.Sprintf("terraform-%s", base64.URLEncoding.EncodeToString(hash[:]))
-		log.Printf("[DEBUG] Computed Launch config name: %s", config_name)
-		createLaunchConfigurationOpts.LaunchConfigurationName = aws.String(config_name)
-		d.SetId(config_name)
+		configName := fmt.Sprintf("terraform-%s", base64.URLEncoding.EncodeToString(hash[:]))
+		log.Printf("[DEBUG] Computed Launch config name: %s", configName)
+		id = configName
 	}
+	createLaunchConfigurationOpts.LaunchConfigurationName = aws.String(id)
 
-	log.Printf("[DEBUG] autoscaling create launch configuration: %#v", createLaunchConfigurationOpts)
+	log.Printf(
+		"[DEBUG] autoscaling create launch configuration: %#v", createLaunchConfigurationOpts)
 	err := autoscalingconn.CreateLaunchConfiguration(&createLaunchConfigurationOpts)
 	if err != nil {
 		return fmt.Errorf("Error creating launch configuration: %s", err)
 	}
 
+	d.SetId(id)
 	log.Printf("[INFO] launch configuration ID: %s", d.Id())
 
 	// We put a Retry here since sometimes eventual consistency bites
@@ -433,28 +419,15 @@ func resourceAwsLaunchConfigurationRead(d *schema.ResourceData, meta interface{}
 
 	lc := describConfs.LaunchConfigurations[0]
 
-	d.Set("key_name", *lc.KeyName)
-	d.Set("image_id", *lc.ImageID)
-	d.Set("instance_type", *lc.InstanceType)
-	d.Set("name", *lc.LaunchConfigurationName)
+	d.Set("key_name", lc.KeyName)
+	d.Set("image_id", lc.ImageID)
+	d.Set("instance_type", lc.InstanceType)
+	d.Set("name", lc.LaunchConfigurationName)
 
-	if lc.IAMInstanceProfile != nil {
-		d.Set("iam_instance_profile", *lc.IAMInstanceProfile)
-	} else {
-		d.Set("iam_instance_profile", nil)
-	}
-
-	if lc.SpotPrice != nil {
-		d.Set("spot_price", *lc.SpotPrice)
-	} else {
-		d.Set("spot_price", nil)
-	}
-
-	if lc.SecurityGroups != nil {
-		d.Set("security_groups", lc.SecurityGroups)
-	} else {
-		d.Set("security_groups", nil)
-	}
+	d.Set("iam_instance_profile", lc.IAMInstanceProfile)
+	d.Set("ebs_optimized", lc.EBSOptimized)
+	d.Set("spot_price", lc.SpotPrice)
+	d.Set("security_groups", lc.SecurityGroups)
 
 	if err := readLCBlockDevices(d, &lc, ec2conn); err != nil {
 		return err
@@ -490,10 +463,15 @@ func readLCBlockDevices(d *schema.ResourceData, lc *autoscaling.LaunchConfigurat
 	if err := d.Set("ebs_block_device", ibds["ebs"]); err != nil {
 		return err
 	}
+	if err := d.Set("ephemeral_block_device", ibds["ephemeral"]); err != nil {
+		return err
+	}
 	if ibds["root"] != nil {
 		if err := d.Set("root_block_device", []interface{}{ibds["root"]}); err != nil {
 			return err
 		}
+	} else {
+		d.Set("root_block_device", []interface{}{})
 	}
 
 	return nil
@@ -503,12 +481,13 @@ func readBlockDevicesFromLaunchConfiguration(d *schema.ResourceData, lc *autosca
 	map[string]interface{}, error) {
 	blockDevices := make(map[string]interface{})
 	blockDevices["ebs"] = make([]map[string]interface{}, 0)
+	blockDevices["ephemeral"] = make([]map[string]interface{}, 0)
 	blockDevices["root"] = nil
 	if len(lc.BlockDeviceMappings) == 0 {
 		return nil, nil
 	}
 	rootDeviceName, err := fetchRootDeviceName(d.Get("image_id").(string), ec2conn)
-	if err == nil {
+	if err != nil {
 		return nil, err
 	}
 	for _, bdm := range lc.BlockDeviceMappings {
@@ -517,7 +496,7 @@ func readBlockDevicesFromLaunchConfiguration(d *schema.ResourceData, lc *autosca
 			bd["delete_on_termination"] = *bdm.EBS.DeleteOnTermination
 		}
 		if bdm.EBS != nil && bdm.EBS.VolumeSize != nil {
-			bd["volume_size"] = bdm.EBS.VolumeSize
+			bd["volume_size"] = *bdm.EBS.VolumeSize
 		}
 		if bdm.EBS != nil && bdm.EBS.VolumeType != nil {
 			bd["volume_type"] = *bdm.EBS.VolumeType
@@ -525,16 +504,21 @@ func readBlockDevicesFromLaunchConfiguration(d *schema.ResourceData, lc *autosca
 		if bdm.EBS != nil && bdm.EBS.IOPS != nil {
 			bd["iops"] = *bdm.EBS.IOPS
 		}
-		if bdm.DeviceName != nil && bdm.DeviceName == rootDeviceName {
+		if bdm.DeviceName != nil && *bdm.DeviceName == *rootDeviceName {
 			blockDevices["root"] = bd
 		} else {
 			if bdm.DeviceName != nil {
 				bd["device_name"] = *bdm.DeviceName
 			}
-			if bdm.EBS != nil && bdm.EBS.SnapshotID != nil {
-				bd["snapshot_id"] = *bdm.EBS.SnapshotID
+			if bdm.VirtualName != nil {
+				bd["virtual_name"] = *bdm.VirtualName
+				blockDevices["ephemeral"] = append(blockDevices["ephemeral"].([]map[string]interface{}), bd)
+			} else {
+				if bdm.EBS != nil && bdm.EBS.SnapshotID != nil {
+					bd["snapshot_id"] = *bdm.EBS.SnapshotID
+				}
+				blockDevices["ebs"] = append(blockDevices["ebs"].([]map[string]interface{}), bd)
 			}
-			blockDevices["ebs"] = append(blockDevices["ebs"].([]map[string]interface{}), bd)
 		}
 	}
 	return blockDevices, nil
