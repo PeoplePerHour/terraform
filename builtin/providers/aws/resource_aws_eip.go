@@ -60,7 +60,7 @@ func resourceAwsEip() *schema.Resource {
 }
 
 func resourceAwsEipCreate(d *schema.ResourceData, meta interface{}) error {
-	ec2conn := meta.(*AWSClient).ec2SDKconn
+	ec2conn := meta.(*AWSClient).ec2conn
 
 	// By default, we're not in a VPC
 	domainOpt := ""
@@ -97,7 +97,7 @@ func resourceAwsEipCreate(d *schema.ResourceData, meta interface{}) error {
 }
 
 func resourceAwsEipRead(d *schema.ResourceData, meta interface{}) error {
-	ec2conn := meta.(*AWSClient).ec2SDKconn
+	ec2conn := meta.(*AWSClient).ec2conn
 
 	domain := resourceAwsEipDomain(d)
 	id := d.Id()
@@ -130,7 +130,7 @@ func resourceAwsEipRead(d *schema.ResourceData, meta interface{}) error {
 
 	// Verify AWS returned our EIP
 	if len(describeAddresses.Addresses) != 1 ||
-		*describeAddresses.Addresses[0].AllocationID != id ||
+		(domain == "vpc" && *describeAddresses.Addresses[0].AllocationID != id) ||
 		*describeAddresses.Addresses[0].PublicIP != id {
 		if err != nil {
 			return fmt.Errorf("Unable to find EIP: %#v", describeAddresses.Addresses)
@@ -148,7 +148,7 @@ func resourceAwsEipRead(d *schema.ResourceData, meta interface{}) error {
 }
 
 func resourceAwsEipUpdate(d *schema.ResourceData, meta interface{}) error {
-	ec2conn := meta.(*AWSClient).ec2SDKconn
+	ec2conn := meta.(*AWSClient).ec2conn
 
 	domain := resourceAwsEipDomain(d)
 
@@ -181,7 +181,7 @@ func resourceAwsEipUpdate(d *schema.ResourceData, meta interface{}) error {
 }
 
 func resourceAwsEipDelete(d *schema.ResourceData, meta interface{}) error {
-	ec2conn := meta.(*AWSClient).ec2SDKconn
+	ec2conn := meta.(*AWSClient).ec2conn
 
 	if err := resourceAwsEipRead(d, meta); err != nil {
 		return err
