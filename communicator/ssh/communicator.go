@@ -229,11 +229,8 @@ func (c *Communicator) UploadScript(path string, input io.Reader) error {
 		return err
 	}
 
-	var stdout, stderr bytes.Buffer
 	cmd := &remote.Cmd{
-		Command: fmt.Sprintf("chmod 0777 %s", path),
-		Stdout:  &stdout,
-		Stderr:  &stderr,
+		Command: fmt.Sprintf("chmod 0777 %s", fmt.Sprint(path, script)),
 	}
 	if err := c.Start(cmd); err != nil {
 		return fmt.Errorf(
@@ -241,11 +238,6 @@ func (c *Communicator) UploadScript(path string, input io.Reader) error {
 				"machine: %s", err)
 	}
 	cmd.Wait()
-	if cmd.ExitStatus != 0 {
-		return fmt.Errorf(
-			"Error chmodding script file to 0777 in remote "+
-				"machine %d: %s %s", cmd.ExitStatus, stdout.String(), stderr.String())
-	}
 
 	return nil
 }
