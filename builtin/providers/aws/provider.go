@@ -38,6 +38,7 @@ func Provider() terraform.ResourceProvider {
 				Optional: true,
 				DefaultFunc: schema.MultiEnvDefaultFunc([]string{
 					"AWS_SESSION_TOKEN",
+					"AWS_SECURITY_TOKEN",
 				}, ""),
 				Description: descriptions["token"],
 			},
@@ -103,6 +104,7 @@ func Provider() terraform.ResourceProvider {
 			"aws_main_route_table_association": resourceAwsMainRouteTableAssociation(),
 			"aws_network_acl":                  resourceAwsNetworkAcl(),
 			"aws_network_interface":            resourceAwsNetworkInterface(),
+			"aws_proxy_protocol_policy":        resourceAwsProxyProtocolPolicy(),
 			"aws_route53_record":               resourceAwsRoute53Record(),
 			"aws_route53_zone":                 resourceAwsRoute53Zone(),
 			"aws_route_table":                  resourceAwsRouteTable(),
@@ -115,6 +117,7 @@ func Provider() terraform.ResourceProvider {
 			"aws_vpc_dhcp_options":             resourceAwsVpcDhcpOptions(),
 			"aws_vpc_dhcp_options_association": resourceAwsVpcDhcpOptionsAssociation(),
 			"aws_vpn_connection":               resourceAwsVpnConnection(),
+			"aws_vpn_connection_route":         resourceAwsVpnConnectionRoute(),
 			"aws_vpn_gateway":                  resourceAwsVpnGateway(),
 		},
 
