@@ -4,6 +4,7 @@ IMPROVEMENTS:
 
   * provider/aws: `aws_s3_bucket` exports `hosted_zone_id` and `region` [GH-1865]
   * provider/aws: `aws_route53_record` exports `fqdn` [GH-1847]
+  * provider/aws: `aws_route53_hosted_zone` can create private hosted zones [GH-1526]
 
 BUG FIXES:
 
@@ -779,5 +780,3 @@ BUG FIXES:
 ## 0.1.0 (July 28, 2014)
 
   * Initial release
-
-
