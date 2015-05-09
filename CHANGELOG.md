@@ -2,6 +2,7 @@
 
 IMPROVEMENTS:
 
+  * **New resource: `aws_route53_zone_association`**
   * provider/aws: `aws_s3_bucket` exports `hosted_zone_id` and `region` [GH-1865]
   * provider/aws: `aws_route53_record` exports `fqdn` [GH-1847]
   * provider/aws: `aws_route53_hosted_zone` can create private hosted zones [GH-1526]
