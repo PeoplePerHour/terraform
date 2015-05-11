@@ -1155,6 +1155,58 @@ func TestContext2Plan_moduleDestroy(t *testing.T) {
 	}
 }
 
+// GH-1835
+func TestContext2Plan_moduleDestroyCycle(t *testing.T) {
+	m := testModule(t, "plan-module-destroy-gh-1835")
+	p := testProvider("aws")
+	p.DiffFn = testDiffFn
+	s := &State{
+		Modules: []*ModuleState{
+			&ModuleState{
+				Path: []string{"root", "a_module"},
+				Resources: map[string]*ResourceState{
+					"aws_instance.a": &ResourceState{
+						Type: "aws_instance",
+						Primary: &InstanceState{
+							ID: "a",
+						},
+					},
+				},
+			},
+			&ModuleState{
+				Path: []string{"root", "b_module"},
+				Resources: map[string]*ResourceState{
+					"aws_instance.b": &ResourceState{
+						Type: "aws_instance",
+						Primary: &InstanceState{
+							ID: "b",
+						},
+					},
+				},
+			},
+		},
+	}
+	ctx := testContext2(t, &ContextOpts{
+		Module: m,
+		Providers: map[string]ResourceProviderFactory{
+			"aws": testProviderFuncFixed(p),
+		},
+		State:   s,
+		Destroy: true,
+	})
+
+	plan, err := ctx.Plan()
+	if err != nil {
+		t.Fatalf("err: %s", err)
+	}
+
+	actual := strings.TrimSpace(plan.String())
+	expected := strings.TrimSpace(testTerraformPlanModuleDestroyCycleStr)
+	if actual != expected {
+		t.Fatalf("bad:\n%s", actual)
+	}
+}
+
 func TestContext2Plan_moduleDestroyMultivar(t *testing.T) {
 	m := testModule(t, "plan-module-destroy-multivar")
 	p := testProvider("aws")
@@ -6125,6 +6177,87 @@ aws_instance.foo.0:
   ID = i-bcd345
 aws_instance.foo.1:
   ID = i-bcd345
+	`)
+}
+
+func TestContext2Apply_targetedModule(t *testing.T) {
+	m := testModule(t, "apply-targeted-module")
+	p := testProvider("aws")
+	p.ApplyFn = testApplyFn
+	p.DiffFn = testDiffFn
+	ctx := testContext2(t, &ContextOpts{
+		Module: m,
+		Providers: map[string]ResourceProviderFactory{
+			"aws": testProviderFuncFixed(p),
+		},
+		Targets: []string{"module.child"},
+	})
+
+	if _, err := ctx.Plan(); err != nil {
+		t.Fatalf("err: %s", err)
+	}
+
+	state, err := ctx.Apply()
+	if err != nil {
+		t.Fatalf("err: %s", err)
+	}
+
+	mod := state.ModuleByPath([]string{"root", "child"})
+	if mod == nil {
+		t.Fatalf("no child module found in the state!\n\n%#v", state)
+	}
+	if len(mod.Resources) != 2 {
+		t.Fatalf("expected 2 resources, got: %#v", mod.Resources)
+	}
+
+	checkStateString(t, state, `
+<no state>
+module.child:
+  aws_instance.bar:
+    ID = foo
+    num = 2
+    type = aws_instance
+  aws_instance.foo:
+    ID = foo
+    num = 2
+    type = aws_instance
+	`)
+}
+
+func TestContext2Apply_targetedModuleResource(t *testing.T) {
+	m := testModule(t, "apply-targeted-module-resource")
+	p := testProvider("aws")
+	p.ApplyFn = testApplyFn
+	p.DiffFn = testDiffFn
+	ctx := testContext2(t, &ContextOpts{
+		Module: m,
+		Providers: map[string]ResourceProviderFactory{
+			"aws": testProviderFuncFixed(p),
+		},
+		Targets: []string{"module.child.aws_instance.foo"},
+	})
+
+	if _, err := ctx.Plan(); err != nil {
+		t.Fatalf("err: %s", err)
+	}
+
+	state, err := ctx.Apply()
+	if err != nil {
+		t.Fatalf("err: %s", err)
+	}
+
+	mod := state.ModuleByPath([]string{"root", "child"})
+	if len(mod.Resources) != 1 {
+		t.Fatalf("expected 1 resource, got: %#v", mod.Resources)
+	}
+
+	checkStateString(t, state, `
+<no state>
+module.child:
+  aws_instance.foo:
+    ID = foo
+    num = 2
+    type = aws_instance
 	`)
 }
 

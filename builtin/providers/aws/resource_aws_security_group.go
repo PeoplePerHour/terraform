@@ -32,6 +32,7 @@ func resourceAwsSecurityGroup() *schema.Resource {
 			"description": &schema.Schema{
 				Type:     schema.TypeString,
 				Optional: true,
+				ForceNew: true,
 				Default:  "Managed by Terraform",
 			},
 
@@ -149,7 +150,7 @@ func resourceAwsSecurityGroupCreate(d *schema.ResourceData, meta interface{}) er
 
 	securityGroupOpts := &ec2.CreateSecurityGroupInput{}
 
-	if v := d.Get("vpc_id"); v != nil {
+	if v, ok := d.GetOk("vpc_id"); ok {
 		securityGroupOpts.VPCID = aws.String(v.(string))
 	}
 
@@ -439,8 +440,14 @@ func resourceAwsSecurityGroupUpdateRules(
 		os := o.(*schema.Set)
 		ns := n.(*schema.Set)
 
-		remove := expandIPPerms(group, os.Difference(ns).List())
-		add := expandIPPerms(group, ns.Difference(os).List())
+		remove, err := expandIPPerms(group, os.Difference(ns).List())
+		if err != nil {
+			return err
+		}
+		add, err := expandIPPerms(group, ns.Difference(os).List())
+		if err != nil {
+			return err
+		}
 
 		// TODO: We need to handle partial state better in the in-between
 		// in this update.

@@ -1,4 +1,16 @@
-## 0.5.0 (unreleased)
+## 0.5.1 (unreleased)
+
+IMPROVEMENTS:
+
+  * provider/aws: `aws_s3_bucket` exports `hosted_zone_id` and `region` [GH-1865]
+  * provider/aws: `aws_route53_record` exports `fqdn` [GH-1847]
+
+BUG FIXES:
+
+  * provider/aws: Mark `aws_security_group` description as `ForceNew` [GH-1871]
+  * command/push: local vars override remote ones [GH-1881]
+
+## 0.5.0 (May 7, 2015)
 
 FEATURES:
 
@@ -13,6 +25,10 @@ FEATURES:
   * **Automatic AWS retries**: This release includes a lot of improvement
      around automatic retries of transient errors in AWS. The number of
      retry attempts is also configurable.
+  * **Templates**: A new `template_file` resource allows long strings needing
+     variable interpolation to be moved into files. [GH-1778]
+  * **Provision with WinRM**: Provisioners can now run remote commands on
+     Windows hosts. [GH-1483]
 
 IMPROVEMENTS:
 
@@ -21,13 +37,9 @@ IMPROVEMENTS:
   * **New resource: `aws_app_cookie_stickiness_policy`**
   * **New resource: `aws_customer_gateway`**
   * **New resource: `aws_ebs_volume`**
-  * **New resource: `aws_lb_cookie_stickiness_policy`**
-  * **New resource: `aws_vpc_dhcp_options`**
-  * **New resource: `aws_vpc_dhcp_options_association`**
-  * **New resource: `aws_vpn_connection_route`**
-  * **New resource: `google_dns_managed_zone`**
-  * **New resource: `google_dns_record_set`**
-  * **New resource: `aws_proxy_protocol_policy`**
+  * **New resource: `aws_elasticache_cluster`**
+  * **New resource: `aws_elasticache_security_group`**
+  * **New resource: `aws_elasticache_subnet_group`**
   * **New resource: `aws_iam_access_key`**
   * **New resource: `aws_iam_group_policy`**
   * **New resource: `aws_iam_group`**
@@ -37,7 +49,14 @@ IMPROVEMENTS:
   * **New resource: `aws_iam_role`**
   * **New resource: `aws_iam_user_policy`**
   * **New resource: `aws_iam_user`**
+  * **New resource: `aws_lb_cookie_stickiness_policy`**
+  * **New resource: `aws_proxy_protocol_policy`**
   * **New resource: `aws_security_group_rule`**
+  * **New resource: `aws_vpc_dhcp_options_association`**
+  * **New resource: `aws_vpc_dhcp_options`**
+  * **New resource: `aws_vpn_connection_route`**
+  * **New resource: `google_dns_managed_zone`**
+  * **New resource: `google_dns_record_set`**
   * **Migrate to upstream AWS SDK:** Migrate the AWS provider to
       [awslabs/aws-sdk-go](https://github.com/awslabs/aws-sdk-go),
       the offical `awslabs` library. Previously we had forked the library for
@@ -55,16 +74,23 @@ IMPROVEMENTS:
   * provider/aws: White or blacklist account IDs that can be used to
       protect against accidents. [GH-1595]
   * provider/aws: Add a subset of IAM resources [GH-939]
+  * provider/aws: `aws_autoscaling_group` retries deletes through "in progress"
+      errors [GH-1840]
+  * provider/aws: `aws_autoscaling_group` waits for healthy capacity during
+      ASG creation [GH-1839]
   * provider/aws: `aws_instance` supports placement groups [GH-1358]
   * provider/aws: `aws_eip` supports network interface attachment [GH-1681]
   * provider/aws: `aws_elb` supports in-place changing of listeners [GH-1619]
   * provider/aws: `aws_elb` supports connection draining settings [GH-1502]
   * provider/aws: `aws_elb` increase default idle timeout to 60s [GH-1646]
   * provider/aws: `aws_key_pair` name can be omitted and generated [GH-1751]
+  * provider/aws: `aws_network_acl` improved validation for network ACL ports
+      and protocols [GH-1798] [GH-1808]
   * provider/aws: `aws_route_table` can target network interfaces [GH-968]
   * provider/aws: `aws_route_table` can specify propogating VGWs [GH-1516]
   * provider/aws: `aws_route53_record` supports weighted sets [GH-1578]
   * provider/aws: `aws_route53_zone` exports nameservers [GH-1525]
+  * provider/aws: `aws_s3_bucket` website support [GH-1738]
   * provider/aws: `aws_security_group` name becomes optional and can be
       automatically set to a unique identifier; this helps with
       `create_before_destroy` scenarios [GH-1632]
@@ -75,6 +101,7 @@ IMPROVEMENTS:
   * provider/aws: `aws_elb` exports `source_security_group` field [GH-1708]
   * provider/aws: `aws_route53_record` supports alias targeting [GH-1775]
   * provider/aws: Remove default AWS egress rule for newly created Security Groups [GH-1765]
+  * provider/consul: add `scheme` configuration argument [GH-1838]
   * provider/docker: `docker_container` can specify links [GH-1564]
   * provider/google: `resource_compute_disk` supports snapshots [GH-1426]
   * provider/google: `resource_compute_instance` supports specifying the
@@ -120,6 +147,8 @@ BUG FIXES:
   * provider/aws: ELB security groups can be updated in-place [GH-1662]
   * provider/aws: `aws_main_route_table_association` can be deleted
       manually [GH-1806]
+  * provider/docker: image can reference more complex image addresses,
+      such as with private repos with ports [GH-1818]
   * provider/openstack: region config is not required [GH-1441]
   * provider/openstack: `enable_dhcp` for networking subnet should be bool [GH-1741]
   * provisioner/remote-exec: add random number to uploaded script path so

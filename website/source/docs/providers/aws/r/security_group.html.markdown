@@ -3,7 +3,7 @@ layout: "aws"
 page_title: "AWS: aws_security_group"
 sidebar_current: "docs-aws-resource-security-group"
 description: |-
-  Provides an security group resource.
+  Provides a security group resource.
 ---
 
 # aws\_security\_group
@@ -67,7 +67,7 @@ resource "aws_security_group" "allow_all" {
 The following arguments are supported:
 
 * `name` - (Required) The name of the security group
-* `description` - (Required) The security group description.
+* `description` - (Optional) The security group description. Defaults to "Managed by Terraform". Cannot be "".
 * `ingress` - (Optional) Can be specified multiple times for each
    ingress rule. Each ingress block supports fields documented below.
 * `egress` - (Optional, VPC only) Can be specified multiple times for each
@@ -79,7 +79,8 @@ The `ingress` block supports:
 
 * `cidr_blocks` - (Optional) List of CIDR blocks. Cannot be used with `security_groups`.
 * `from_port` - (Required) The start port.
-* `protocol` - (Required) The protocol.
+* `protocol` - (Required) The protocol. If you select a protocol of
+"-1", you must specify a "from_port" and "to_port" equal to 0.
 * `security_groups` - (Optional) List of security group Group Names if using
     EC2-Classic or the default VPC, or Group IDs if using a non-default VPC.
     Cannot be used with `cidr_blocks`.
@@ -91,7 +92,8 @@ The `egress` block supports:
 
 * `cidr_blocks` - (Optional) List of CIDR blocks. Cannot be used with `security_groups`.
 * `from_port` - (Required) The start port.
-* `protocol` - (Required) The protocol.
+* `protocol` - (Required) The protocol. If you select a protocol of
+"-1", you must specify a "from_port" and "to_port" equal to 0.
 * `security_groups` - (Optional) List of security group Group Names if using
     EC2-Classic or the default VPC, or Group IDs if using a non-default VPC.
     Cannot be used with `cidr_blocks`.

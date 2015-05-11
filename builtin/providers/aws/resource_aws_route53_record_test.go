@@ -50,7 +50,7 @@ func TestExpandRecordName(t *testing.T) {
 	}
 }
 
-func TestAccRoute53Record(t *testing.T) {
+func TestAccRoute53Record_basic(t *testing.T) {
 	resource.Test(t, resource.TestCase{
 		PreCheck:     func() { testAccPreCheck(t) },
 		Providers:    testAccProviders,
@@ -148,14 +148,6 @@ func TestAccRoute53Record_alias(t *testing.T) {
 			resource.TestStep{
 				Config: testAccRoute53ElbAliasRecord,
 				Check: resource.ComposeTestCheckFunc(
-					testAccCheckRoute53RecordExists("aws_route53_record.elb_alias"),
-				),
-			},
-
-			resource.TestStep{
-				Config: testAccRoute53AliasRecord,
-				Check: resource.ComposeTestCheckFunc(
-					testAccCheckRoute53RecordExists("aws_route53_record.origin"),
 					testAccCheckRoute53RecordExists("aws_route53_record.alias"),
 				),
 			},

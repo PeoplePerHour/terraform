@@ -9,6 +9,12 @@ import (
 	"github.com/hashicorp/terraform/dot"
 )
 
+// GraphNodeCountDependent is implemented by resources for giving only
+// the dependencies they have from the "count" field.
+type GraphNodeCountDependent interface {
+	CountDependentOn() []string
+}
+
 // GraphNodeConfigResource represents a resource within the config graph.
 type GraphNodeConfigResource struct {
 	Resource *config.Resource
@@ -19,6 +25,8 @@ type GraphNodeConfigResource struct {
 
 	// Used during DynamicExpand to target indexes
 	Targets []ResourceAddress
+
+	Path []string
 }
 
 func (n *GraphNodeConfigResource) ConfigType() GraphNodeConfigType {
@@ -27,6 +35,18 @@ func (n *GraphNodeConfigResource) ConfigType() GraphNodeConfigType {
 
 func (n *GraphNodeConfigResource) DependableName() []string {
 	return []string{n.Resource.Id()}
+}
+
+// GraphNodeCountDependent impl.
+func (n *GraphNodeConfigResource) CountDependentOn() []string {
+	result := make([]string, 0, len(n.Resource.RawCount.Variables))
+	for _, v := range n.Resource.RawCount.Variables {
+		if vn := varNameForVar(v); vn != "" {
+			result = append(result, vn)
+		}
+	}
+
+	return result
 }
 
 // GraphNodeDependent impl.
@@ -174,7 +194,7 @@ func (n *GraphNodeConfigResource) DynamicExpand(ctx EvalContext) (*Graph, error)
 // GraphNodeAddressable impl.
 func (n *GraphNodeConfigResource) ResourceAddress() *ResourceAddress {
 	return &ResourceAddress{
-		// Indicates no specific index; will match on other three fields
+		Path:         n.Path[1:],
 		Index:        -1,
 		InstanceType: TypePrimary,
 		Name:         n.Resource.Name,
