@@ -1,56 +1,18 @@
 ## 0.5.1 (unreleased)
 
-FEATURES:
-
-  * **Chef provisioning**: You can now provision new hosts (both Linux and
-     Windows) with [Chef](https://chef.io) using a native provisioner [GH-1868]
-
 IMPROVEMENTS:
 
-  * **New config function: `formatlist`** - Format lists in a similar way to `format`.
-    Useful for creating URLs from a list of IPs. [GH-1829]
   * **New resource: `aws_route53_zone_association`**
-  * provider/aws: `aws_autoscaling_group` can wait for capacity in ELB
-      via `min_elb_capacity` [GH-1970]
-  * provider/aws: `aws_db_instances` supports `license_model` [GH-1966]
-  * provider/aws: `aws_elasticache_cluster` add support for Tags [GH-1965]
   * provider/aws: `aws_s3_bucket` exports `hosted_zone_id` and `region` [GH-1865]
   * provider/aws: `aws_route53_record` exports `fqdn` [GH-1847]
-  * provider/aws: `aws_route53_zone` can create private hosted zones [GH-1526]
-  * provider/google: `google_compute_instance` `scratch` attribute added [GH-1920]
+  * provider/aws: `aws_route53_hosted_zone` can create private hosted zones [GH-1526]
 
 BUG FIXES:
 
-  * core: fix "resource not found" for interpolation issues with modules
-  * core: fix unflattenable error for orphans [GH-1922]
-  * core: fix deadlock with create-before-destroy + modules [GH-1949]
-  * core: fix "no roots found" error with create-before-destroy [GH-1953]
-  * core: variables set with environment variables won't validate as
-      not set without a default [GH-1930]
-  * core: resources with a blank ID in the state are now assumed to not exist [GH-1905]
-  * command/push: local vars override remote ones [GH-1881]
   * provider/aws: Mark `aws_security_group` description as `ForceNew` [GH-1871]
-  * provider/aws: `aws_db_instance` ARN value is correct [GH-1910]
-  * provider/aws: `aws_db_instance` only submit modify request if there
-      is a change. [GH-1906]
-  * provider/aws: `aws_elasticache_cluster` export missing information on cluster nodes [GH-1965]
-  * provider/aws: bad AMI on a launch configuration won't block refresh [GH-1901]
-  * provider/aws: `aws_security_group` + `aws_subnet` - destroy timeout increased
-    to prevent DependencyViolation errors. [GH-1886]
-  * provider/google: `google_compute_instance` Local SSDs no-longer cause crash
-      [GH-1088]
-  * provider/google: `google_http_health_check` Defaults now driven from Terraform,
-      avoids errors on update [GH-1894]
-  * provider/google: `google_compute_template` Update Instance Template network
-      definition to match changes to Instance [GH-980]
-  * provider/template: Fix infinite diff [GH-1898]
+  * command/push: local vars override remote ones [GH-1881]
 
 ## 0.5.0 (May 7, 2015)
-
-BACKWARDS INCOMPATIBILITIES:
-
-  * provider/aws: Terraform now remove the default egress rule created by AWS in
-    a new security group.
 
 FEATURES:
 
